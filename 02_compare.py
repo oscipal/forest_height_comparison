@@ -35,6 +35,7 @@ import rasterio
 import config
 from bgt import als as als_mod
 from bgt import coreg, metrics, viz
+from bgt import eth as eth_mod
 
 
 # --------------------------------------------------------------------------- #
@@ -180,6 +181,29 @@ def compare_product(
         stats2 = agg2.full_stats(*offset, [args.primary_stat])
         df[f"als2_{args.primary_stat}"] = stats2[args.primary_stat].ravel()
 
+    # ------------------------------------------------------------------ #
+    # ETH global canopy height, aggregated onto the same BIOMASS cells
+    # ------------------------------------------------------------------ #
+    #
+    # A second spaceborne product on one grid with the first. It is aggregated
+    # at the nominal geolocation, not at the offset found for the ALS: that
+    # shift describes where the ALS sits relative to BIOMASS and says nothing
+    # about where a Sentinel-2 derived product sits.
+    eth = None
+    if not args.no_eth:
+        eth = eth_mod.load_eth(
+            site, footprint_bounds=footprint, footprint_crs=chm.crs,
+            pad_m=args.shift_search + 2 * config.FINE_CELL_M, eth_dir=args.eth_dir,
+        )
+    if eth is not None:
+        eth_grid_fine = coreg.build_fine_grid(eth, fh, args.fine_cell,
+                                              args.shift_search)
+        eth_agg = coreg.BlockAggregator(eth_grid_fine, fh.shape)
+        eth_stats = eth_agg.full_stats(0, 0, config.ALS_STATS)
+        df["eth_coverage"] = eth_stats["coverage"].ravel()
+        for stat in config.ALS_STATS:
+            df[f"eth_{stat}"] = eth_stats[stat].ravel()
+
     keep = (
         np.isfinite(df["fh"])
         & (df["coverage"] >= args.min_coverage)
@@ -227,6 +251,54 @@ def compare_product(
         ).to_csv(out_dir / "metrics_by_chm_product.csv", index=False)
 
     # ------------------------------------------------------------------ #
+    # Three-way comparison on the BIOMASS grid
+    # ------------------------------------------------------------------ #
+    #
+    # Reported as three pairings over one common set of cells, so that the two
+    # products are judged on exactly the same sample: neither is credited for
+    # covering ground the other one misses.
+    eth_ref_col = f"eth_{args.primary_stat}"
+    eth_summary: dict[str, float] = {}
+    common = None
+    if eth is not None and eth_ref_col in paired:
+        common = paired[
+            np.isfinite(paired[eth_ref_col])
+            & (paired["eth_coverage"] >= args.min_coverage)
+        ].copy()
+        print()
+        print(f"  {len(common)} cells carry ALS, BIOMASS and ETH "
+              f"(of {len(paired)} ALS/BIOMASS pairs)")
+        if len(common) >= 20:
+            pairings = [
+                ("BIOMASS vs ALS", ref_col, "fh"),
+                ("ETH vs ALS", ref_col, eth_ref_col),
+                ("BIOMASS vs ETH", eth_ref_col, "fh"),
+            ]
+            rows = []
+            for name, ref, prod in pairings:
+                m = metrics.compute_metrics(common[ref].to_numpy(),
+                                            common[prod].to_numpy())
+                rows.append({"comparison": name, "reference": ref,
+                             "product": prod, **m})
+            three_way = pd.DataFrame(rows)
+            three_way.to_csv(out_dir / "metrics_three_way.csv", index=False)
+            print(three_way[["comparison", "n", "bias", "mae", "rmse",
+                             "pearson_r"]]
+                  .to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+            eth_summary = {
+                "n_three_way_cells": len(common),
+                "eth_vs_als_bias": three_way.loc[1, "bias"],
+                "eth_vs_als_rmse": three_way.loc[1, "rmse"],
+                "eth_vs_als_pearson_r": three_way.loc[1, "pearson_r"],
+                "biomass_vs_eth_bias": three_way.loc[2, "bias"],
+                "biomass_vs_eth_rmse": three_way.loc[2, "rmse"],
+                "biomass_vs_eth_pearson_r": three_way.loc[2, "pearson_r"],
+            }
+        else:
+            print("  too few three-way cells for meaningful statistics")
+            common = None
+
+    # ------------------------------------------------------------------ #
     # Figures
     # ------------------------------------------------------------------ #
     print("\n  figures:")
@@ -267,6 +339,25 @@ def compare_product(
         viz.plot_quality_strata(qual_table, out_dir / "fig08_quality_classes.png",
                                 subtitle=subtitle)
 
+    if common is not None:
+        eth_label = f"ETH canopy height, {args.primary_stat} per cell (m)"
+        viz.plot_scatter(common[eth_ref_col].to_numpy(), common["fh"].to_numpy(),
+                         out_dir / "fig09_biomass_vs_eth.png",
+                         ref_label=eth_label,
+                         prod_label="BIOMASS L2A forest height (m)",
+                         subtitle=subtitle, prod_short="BIOMASS")
+        viz.plot_scatter(common[ref_col].to_numpy(),
+                         common[eth_ref_col].to_numpy(),
+                         out_dir / "fig10_eth_vs_als.png", ref_label=ref_label,
+                         prod_label="ETH canopy height (m)", subtitle=subtitle,
+                         prod_short="ETH")
+        eth_map = np.full(fh.shape, np.nan)
+        eth_map[common["row"], common["col"]] = common[eth_ref_col]
+        viz.plot_maps(als_grid, eth_map, extent, out_dir / "fig11_eth_maps.png",
+                      als_label=args.primary_stat, subtitle=subtitle,
+                      prod_name="ETH canopy height (aggregated)",
+                      prod_short="ETH", grid_name="BIOMASS")
+
     return {
         "site": site_label,
         "product": item_id,
@@ -287,6 +378,7 @@ def compare_product(
         "pearson_before_shift": shift.pearson_at_zero if shift else np.nan,
         "rmse_before_shift": shift.rmse_at_zero if shift else np.nan,
         **headline,
+        **eth_summary,
     }
 
 
@@ -335,6 +427,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    default=config.FH_QUALITY_MAX,
                    help="keep only BIOMASS pixels with quality <= this value; "
                         "'none' disables the filter (default: %(default)s)")
+    p.add_argument("--eth-dir", type=Path, default=config.ETH_DIR,
+                   help="where the ETH clips are (default: %(default)s)")
+    p.add_argument("--no-eth", action="store_true",
+                   help="skip the ETH global canopy height comparison")
     p.add_argument("--strict-mask", action="store_true",
                    help="additionally apply mask_pd04 and mask_steep to the ALS CHM")
     return p.parse_args(argv)
