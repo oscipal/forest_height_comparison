@@ -137,6 +137,43 @@ FH_QUALITY_MAX = 2.0
 
 
 # --------------------------------------------------------------------------- #
+# ETH global canopy height (Lang et al. 2023)
+# --------------------------------------------------------------------------- #
+#
+# A second spaceborne product, for context: 10 m canopy top height regressed
+# from Sentinel-2 with GEDI as the training target, representative of 2020.
+# Published under CC BY 4.0; cite Lang, Jetz, Schindler & Wegner, Nature Ecology
+# & Evolution 7, 1778-1789 (2023), doi:10.1038/s41559-023-02206-6.
+#
+# The tiles are cloud-optimised GeoTIFFs, so the download step reads only the
+# window covering each ALS footprint rather than the whole ~400 MB tile.
+
+#: Base of the ETH libdrive share holding the 3-degree COG tiles.
+ETH_BASE_URL = (
+    "https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt/download"
+    "?path=%2F3deg_cogs&files="
+)
+
+#: Tile file name; ``{tile}`` is the south-west corner, e.g. ``N00E015``.
+ETH_TILE_TEMPLATE = "ETH_GlobalCanopyHeight_10m_2020_{tile}_Map.tif"
+
+#: The companion predictive-standard-deviation tile.
+ETH_SD_TEMPLATE = "ETH_GlobalCanopyHeight_10m_2020_{tile}_Map_SD.tif"
+
+#: Edge length of one tile, in degrees.
+ETH_TILE_DEG = 3
+
+#: Where the clipped ETH windows are stored.
+ETH_DIR = ROOT / "data" / "eth"
+
+#: Degrees added around the ALS outline when clipping.
+ETH_BUFFER_DEG = 0.02
+
+#: The product is delivered as uint8 with 255 as no-data, so heights are whole
+#: metres in 0-254. Values above this are treated as no-data.
+ETH_HEIGHT_MAX = 254.0
+
+# --------------------------------------------------------------------------- #
 # Co-registration and aggregation
 # --------------------------------------------------------------------------- #
 
