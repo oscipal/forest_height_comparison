@@ -117,6 +117,10 @@ The two datasets differ by a factor of ~93 in cell size and sit in different
 coordinate systems, so they have to be brought onto one grid before anything can
 be compared. Every choice below follows from one decision.
 
+![Processing pipeline](docs/pipeline.png)
+
+Every threshold shown on it is the default from `config.py`.
+
 ### The governing decision: aggregate up, never down
 
 **The BIOMASS grid is the target grid and is never resampled.** Interpolating a
