@@ -142,8 +142,11 @@ def plot_maps(
     out_path: Path,
     als_label: str,
     subtitle: str = "",
+    prod_name: str = "BIOMASS L2A forest height",
+    prod_short: str = "BIOMASS",
+    grid_name: str = "BIOMASS",
 ) -> Path:
-    """Side-by-side height maps and their difference, on the BIOMASS grid."""
+    """Side-by-side height maps and their difference, on the product grid."""
     residual = fh_grid - als_grid
     both = np.concatenate(
         [als_grid[np.isfinite(als_grid)].ravel(), fh_grid[np.isfinite(fh_grid)].ravel()]
@@ -155,8 +158,8 @@ def plot_maps(
     fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.6), constrained_layout=True)
     panels = [
         (als_grid, f"ALS reference ({als_label})", CMAP_HEIGHT, dict(vmin=vmin, vmax=vmax), "height (m)"),
-        (fh_grid, "BIOMASS L2A forest height", CMAP_HEIGHT, dict(vmin=vmin, vmax=vmax), "height (m)"),
-        (residual, "Difference (BIOMASS - ALS)", CMAP_RESIDUAL,
+        (fh_grid, prod_name, CMAP_HEIGHT, dict(vmin=vmin, vmax=vmax), "height (m)"),
+        (residual, f"Difference ({prod_short} - ALS)", CMAP_RESIDUAL,
          dict(norm=TwoSlopeNorm(vcenter=0.0, vmin=-rlim, vmax=rlim)), "difference (m)"),
     ]
     for ax, (data, name, cmap, kw, cbar_label) in zip(axes, panels):
@@ -171,7 +174,7 @@ def plot_maps(
         cb.outline.set_visible(False)
         cb.ax.tick_params(labelsize=7, color=AXIS)
     axes[0].set_ylabel("latitude (deg)" if abs(extent[1] - extent[0]) < 5 else "northing (m)")
-    _titleblock(fig, "Canopy height on the BIOMASS grid", subtitle)
+    _titleblock(fig, f"Canopy height on the {grid_name} grid", subtitle)
     return _save(fig, out_path)
 
 
@@ -182,6 +185,7 @@ def plot_scatter(
     ref_label: str,
     prod_label: str = "BIOMASS L2A forest height (m)",
     subtitle: str = "",
+    prod_short: str = "BIOMASS",
 ) -> Path:
     """Density scatter against the 1:1 line, with OLS and RMA fits."""
     ok = np.isfinite(reference) & np.isfinite(product)
@@ -212,7 +216,7 @@ def plot_scatter(
     ax.set_aspect("equal")
     ax.set_xlabel(ref_label)
     ax.set_ylabel(prod_label)
-    _titleblock(fig, "BIOMASS forest height vs ALS canopy height", subtitle)
+    _titleblock(fig, f"{prod_short} forest height vs ALS canopy height", subtitle)
     ax.legend(loc="lower right")
     _annotate(
         ax,
@@ -235,6 +239,7 @@ def plot_residuals(
     ref_label: str,
     bins: list[float] | None = None,
     subtitle: str = "",
+    prod_short: str = "BIOMASS",
 ) -> Path:
     """Residual against reference height, with binned mean and spread."""
     bins = bins or config.HEIGHT_BINS
@@ -251,21 +256,21 @@ def plot_residuals(
     fig, ax = plt.subplots(figsize=(7.6, 5.0), constrained_layout=True)
     ax.axhline(0.0, color=INK_MUTED, lw=1.2, ls="--", zorder=2)
     ax.scatter(x, resid, s=7, color=BLUE, alpha=0.22, linewidths=0, zorder=3,
-               label="BIOMASS cell")
+               label=f"{prod_short} cell")
     if len(agg):
         ax.errorbar(centres, agg["mean"], yerr=agg["std"], color=ORANGE, lw=2.0,
                     marker="o", ms=6, capsize=4, elinewidth=1.6, zorder=5,
                     markeredgecolor=SURFACE, markeredgewidth=1.2,
                     label="binned mean +/- 1 SD")
     ax.set_xlabel(ref_label)
-    ax.set_ylabel("residual, BIOMASS - ALS (m)")
+    ax.set_ylabel(f"residual, {prod_short} - ALS (m)")
     _titleblock(fig, "Residual structure across the canopy height range", subtitle)
     legend = ax.legend(loc="upper right", markerscale=3)
     for handle in legend.legend_handles:
         handle.set_alpha(1.0)
     _annotate(
         ax,
-        "positive = BIOMASS taller than ALS\n"
+        f"positive = {prod_short} taller than ALS\n"
         "a downward trend indicates saturation over tall canopy",
         loc="lower left",
     )
@@ -278,6 +283,8 @@ def plot_distributions(
     out_path: Path,
     ref_label: str,
     subtitle: str = "",
+    prod_short: str = "BIOMASS",
+    prod_name: str = "BIOMASS L2A FH",
 ) -> Path:
     """Marginal distributions and empirical CDFs of the two height estimates."""
     ok = np.isfinite(reference) & np.isfinite(product)
@@ -287,13 +294,13 @@ def plot_distributions(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.0, 4.6), constrained_layout=True)
 
     ax1.hist(x, bins=edges, color=BLUE, alpha=0.55, label=f"ALS ({ref_label})")
-    ax1.hist(y, bins=edges, color=ORANGE, alpha=0.55, label="BIOMASS L2A FH")
+    ax1.hist(y, bins=edges, color=ORANGE, alpha=0.55, label=prod_name)
     ax1.set_xlabel("canopy height (m)")
-    ax1.set_ylabel("number of BIOMASS cells")
+    ax1.set_ylabel(f"number of {prod_short} cells")
     ax1.set_title("Height distributions")
     ax1.legend(loc="upper right")
 
-    for data, colour, name in ((x, BLUE, "ALS"), (y, ORANGE, "BIOMASS")):
+    for data, colour, name in ((x, BLUE, "ALS"), (y, ORANGE, prod_short)):
         s = np.sort(data)
         ax2.plot(s, np.arange(1, s.size + 1) / s.size, color=colour, label=name)
     ax2.set_xlabel("canopy height (m)")
@@ -303,7 +310,7 @@ def plot_distributions(
     _annotate(
         ax2,
         f"ALS      mean {x.mean():.1f} m, SD {x.std(ddof=1):.1f} m\n"
-        f"BIOMASS  mean {y.mean():.1f} m, SD {y.std(ddof=1):.1f} m",
+        f"{prod_short}  mean {y.mean():.1f} m, SD {y.std(ddof=1):.1f} m",
         loc="upper left",
     )
     _titleblock(fig, "Height distributions of the two estimates", subtitle)
@@ -315,6 +322,7 @@ def plot_bland_altman(
     product: np.ndarray,
     out_path: Path,
     subtitle: str = "",
+    prod_short: str = "BIOMASS",
 ) -> Path:
     """Bland-Altman agreement plot with bias and 95 % limits of agreement."""
     ok = np.isfinite(reference) & np.isfinite(product)
@@ -333,8 +341,8 @@ def plot_bland_altman(
                    ls="-" if colour == ORANGE else "--", zorder=4)
         ax.annotate(name, xy=(0.995, value), xycoords=("axes fraction", "data"),
                     ha="right", va="bottom", fontsize=8, color=INK_SECONDARY)
-    ax.set_xlabel("mean of ALS and BIOMASS height (m)")
-    ax.set_ylabel("difference, BIOMASS - ALS (m)")
+    ax.set_xlabel(f"mean of ALS and {prod_short} height (m)")
+    ax.set_ylabel(f"difference, {prod_short} - ALS (m)")
     _titleblock(fig, "Bland-Altman agreement", subtitle)
     return _save(fig, out_path)
 
@@ -381,8 +389,9 @@ def plot_shift_surface(shift, out_path: Path, subtitle: str = "") -> Path:
 
 
 def plot_stat_comparison(table: pd.DataFrame, out_path: Path,
-                         subtitle: str = "") -> Path:
-    """Which ALS aggregate best matches the BIOMASS estimate."""
+                         subtitle: str = "",
+                         prod_short: str = "BIOMASS") -> Path:
+    """Which ALS aggregate best matches the product estimate."""
     if table.empty:
         raise ValueError("empty metrics table")
     order = ["mean", "p50", "p90", "p95", "p99", "max"]
@@ -410,7 +419,7 @@ def plot_stat_comparison(table: pd.DataFrame, out_path: Path,
         ax.set_xticklabels(tbl["als_stat"])
         ax.set_ylabel(label)
         ax.set_title(f"{label} - {hint}")
-        ax.set_xlabel("ALS statistic per BIOMASS cell")
+        ax.set_xlabel(f"ALS statistic per {prod_short} cell")
         ax.margins(y=0.18)
     _titleblock(fig, "Agreement by choice of ALS aggregate", subtitle)
     return _save(fig, out_path)
