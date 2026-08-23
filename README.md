@@ -15,7 +15,9 @@ pip install -r requirements.txt
 
 python 01_download_biomass.py --list-only          # search, no token needed
 python 01_download_biomass.py --token <offline-token>
+python 01b_download_eth.py                         # ETH 10 m product, no token
 python 02_compare.py                               # per-scene results
+python 02b_compare_eth.py                          # ETH vs ALS on the ETH grid
 python 03_combine.py                               # pooled, all-scene results
 ```
 
@@ -377,6 +379,108 @@ flight polygon inside the rectangular raster window.
 Running with `--quality-max none` fills the maps in completely; what that costs
 in bias is in `metrics_by_quality_class.csv` and `fig08_quality_classes.png`.
 
+## A second product: ETH global canopy height
+
+[Lang et al. (2023)](https://doi.org/10.1038/s41559-023-02206-6) published a
+global 10 m canopy top height map regressed from Sentinel-2 with GEDI as the
+training reference, representative of **2020**. It is included here as a second
+spaceborne product, so that BIOMASS is judged against something other than the
+ALS alone.
+
+`01b_download_eth.py` fetches it. The published tiles are 3° × 3° cloud-optimised
+GeoTIFFs of roughly 400 MB each, but because they are COGs the script reads only
+the window covering each ALS outline straight over HTTP — under 1 MB per site
+instead of 1.3 GB. No account and no token: the data is CC BY 4.0.
+
+```bash
+python 01b_download_eth.py --list-only   # report the tiles each site needs
+python 01b_download_eth.py               # clip them into data/eth/<site>/
+```
+
+The product is compared on **two different grids**, because the two comparisons
+answer different questions:
+
+| Where | Script | Question |
+|---|---|---|
+| BIOMASS ~93 m grid | `02_compare.py` | How does BIOMASS compare with ETH, on one grid, over one common set of cells? |
+| ETH ~9.3 m grid | `02b_compare_eth.py` | How good is ETH at its own resolution, against ALS? |
+
+### On the BIOMASS grid
+
+ETH is aggregated up to the BIOMASS cells exactly as the ALS is — the same fine
+grid, the same block reduction, the same `--min-coverage` rule. It is aggregated
+at the nominal geolocation rather than at the offset found for the ALS: that
+offset describes where the ALS sits relative to BIOMASS and says nothing about a
+Sentinel-2 derived product. Cells are kept only where all three carry data, so
+neither product is credited for covering ground the other one misses.
+
+Pooled over all six scenes, ALS p90 as the reference, n = 4916 cells:
+
+| | bias | MAE | RMSE | Pearson r | RMA slope |
+|---|---|---|---|---|---|
+| BIOMASS vs ALS | −4.38 m | 5.57 m | 7.57 m | 0.583 | 1.157 |
+| **ETH vs ALS** | **−1.23 m** | **4.33 m** | **6.06 m** | 0.387 | 0.639 |
+| BIOMASS vs ETH | −3.14 m | 5.22 m | 7.35 m | 0.407 | 1.812 |
+
+Per site, against ALS p90:
+
+| Site | n | BIOMASS bias | BIOMASS RMSE | BIOMASS r | ETH bias | ETH RMSE | ETH r |
+|---|---|---|---|---|---|---|---|
+| Loundoungou | 2998 | −2.24 m | 4.25 m | 0.25 | −1.81 m | 3.37 m | 0.46 |
+| Luki2025 | 652 | −9.55 m | 13.50 m | 0.25 | −9.63 m | 12.08 m | 0.49 |
+| Mbalmayo | 1266 | −6.77 m | 9.25 m | 0.36 | **+4.46 m** | 6.36 m | 0.65 |
+
+Three things stand out.
+
+**ETH has the lower RMSE at every site**, and the higher within-site correlation
+at every site — 0.46/0.49/0.65 against 0.25/0.25/0.36. On this evidence the
+older, freely available Sentinel-2 product tracks the ALS better than the
+BIOMASS L2A retrieval does over these three forests.
+
+**The pooled correlation reverses that ranking** — 0.583 for BIOMASS against
+0.387 for ETH — and it is the pooled number that is misleading here, not the
+per-site ones. The same height-range effect described above is at work: BIOMASS
+separates the three sites more strongly, which inflates r once they are pooled.
+Within any one site it tracks the canopy less well.
+
+**The two products fail in opposite directions at Mbalmayo**: BIOMASS reads
+6.8 m low, ETH 4.5 m high. Everywhere else both read low. Whatever drives the
+Mbalmayo disagreement is not a property of the forest, since the ALS is the same
+in both comparisons.
+
+### On the ETH grid
+
+`02b_compare_eth.py` aggregates the 1 m ALS up to the ~9.3 m ETH cells — one run
+per site, not per scene, since the ETH map is a single global layer. Results go
+to `outputs_eth/<site>/`, deliberately a separate tree so that `03_combine.py`
+does not pool pairs from a different grid into the BIOMASS sample.
+
+| Site | n cells | bias | MAE | RMSE | Pearson r |
+|---|---|---|---|---|---|
+| Loundoungou | 201 129 | +2.54 m | 6.06 m | 8.39 m | 0.25 |
+| Luki2025 | 45 342 | −2.53 m | 10.74 m | 13.24 m | 0.33 |
+| Mbalmayo | 186 157 | +10.02 m | 10.99 m | 13.55 m | 0.42 |
+
+The errors are much larger than on the 93 m grid, and that is the expected
+result rather than a contradiction: a 10 m cell resolves individual crowns and
+canopy gaps that a Sentinel-2 regression cannot reproduce, and averaging into
+93 m cells removes most of that variance. The maps show it directly — the ALS
+panel is grainy where the ETH panel is smooth.
+
+### Caveats specific to this product
+
+* **The time gap is much larger than for BIOMASS.** The map represents 2020; the
+  ALS is from Feb 2024 (Mbalmayo), Mar 2025 (Loundoungou) and Oct 2025 (Luki).
+  That is a 4–6 year gap, against 2–21 months for the BIOMASS scenes.
+* **Heights are quantised to whole metres** — the product is uint8 with 255 as
+  no-data. This puts a floor of about 0.29 m on any RMSE against it, far below
+  the errors of interest but visible as banding in the scatter plots.
+* **A different height definition again.** ETH is trained on GEDI, so it targets
+  something closer to RH98 than to the ALS first-return top.
+* **Saturation over tall canopy is a documented weakness** of this product, and
+  these sites sit squarely in that regime. The OLS slope of 0.25 against ALS p90
+  is consistent with it.
+
 ## Which ALS statistic?
 
 BIOMASS FH estimates *top canopy height*, and there is no a priori answer to
@@ -545,18 +649,24 @@ LICENSE                    MIT, code only
 FIGURES.md                 what each figure shows and how it was computed
 config.py                  every tunable setting, with the rationale
 01_download_biomass.py     search + download from ESA MAAP, per site
+01b_download_eth.py        clip the ETH 10 m canopy height product, per site
 02_compare.py              co-registration, statistics, figures, per scene
+02b_compare_eth.py         ETH vs ALS on the ETH grid, per site
 03_combine.py              pooled statistics and figures across all scenes
 bgt/maap.py                token exchange, STAC search, streaming download
 bgt/als.py                 ALS CHM loading, masking and site metadata
+bgt/eth.py                 ETH canopy height loading
 bgt/coreg.py               fine grid, block aggregation, shift search
 bgt/metrics.py             validation statistics
 bgt/viz.py                 figure style and per-scene plots
 bgt/viz_combined.py        pooled, multi-scene plots
+docs/pipeline.{png,svg}    the processing-pipeline diagram
 03_processed_<site>/       the ALS products (input) -- gitignored, supply your own
 data/biomass/<site>/       downloaded BIOMASS products -- gitignored, fetched by step 1
 outputs/<site>/<scene>/    per-scene figures and tables
 outputs/_combined/         pooled figures and tables
+outputs_eth/<site>/        ETH-vs-ALS results on the ETH grid
+data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
 ```
 
 ## Caveats worth stating in any write-up
