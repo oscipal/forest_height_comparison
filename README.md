@@ -321,6 +321,58 @@ the canopy.
 The three sites also differ in ALS-to-BIOMASS time gap (2, 14 and 21 months),
 which is confounded with site throughout — see the caveats.
 
+### Why the maps have gaps
+
+`fig01_maps.png` draws only the cells that survived step 5, so every white pixel
+is a cell that failed one of its three conditions. Which condition dominates
+differs sharply between the sites:
+
+| Scene | paired | rejected: quality > 2.0 | rejected: ALS coverage < 90 % | rejected: FH no-data |
+|---|---|---|---|---|
+| Loundoungou 2026-05-19 | 1945 | 0 | 206 | 0 |
+| Loundoungou 2026-06-09 | 1056 | 70 | 89 | 832 |
+| Luki 2025-12-15 | 313 | 98 | 71 | 0 |
+| Luki 2026-01-14 | 342 | 73 | 112 | 0 |
+| Mbalmayo 2025-11-24 | 789 | 939 | 166 | 0 |
+| Mbalmayo 2025-12-15 | 482 | 1059 | 92 | 199 |
+
+(The `paired` column is the row count of each `paired_cells.csv`. Every
+rejection is attributed to a single cause; cells lying entirely outside the
+flight polygon, with no ALS at all, are not counted as rejections.)
+
+**The quality filter is the dominant term at Mbalmayo and Luki.** The quality
+layer behaves like a different variable at each site. Over Loundoungou its 95th
+percentile is 1.11 — the whole footprint sits below the 2.0 threshold and
+essentially nothing is cut, which is why that map is solid. Over Mbalmayo the
+*median* is 3.5 and 9.6 in the two scenes, so more than half of the footprint
+falls in the failed-retrieval tail and is removed.
+
+The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene:
+
+| | n | ALS p90 | BIOMASS FH | bias |
+|---|---|---|---|---|
+| quality ≤ 2 (kept) | 789 | 30.6 m | 25.0 m | −5.6 m |
+| quality > 2 (rejected) | 939 | 30.3 m | 12.0 m | **−18.2 m** |
+
+The ALS canopy is the same height in both groups; BIOMASS reports ~12 m where it
+reports ~30 m next door. These are retrieval failures, not short canopy — the
+same bimodality the threshold was derived from.
+
+**Coverage < 90 % explains the ragged edges** and some of Luki's interior
+speckle. A ~93 m cell needs 90 % of its area in valid, unmasked ALS, so
+scattered 1 m losses take out whole cells: `mask_combined` removes 4.4 % of ALS
+pixels at Mbalmayo and 3.3 % at Luki (mostly `mask_pd02`, pulse density < 2)
+against 0.9 % at Loundoungou. At Mbalmayo a further 14.5 % of cells are
+partially covered but below the threshold.
+
+**FH no-data** matters only for the Mbalmayo 2025-12-15 and Loundoungou
+2026-06-09 scenes, where the product itself is incomplete over the footprint.
+The irregular *outer* boundary of every map is not a gap at all — it is the
+flight polygon inside the rectangular raster window.
+
+Running with `--quality-max none` fills the maps in completely; what that costs
+in bias is in `metrics_by_quality_class.csv` and `fig08_quality_classes.png`.
+
 ## Which ALS statistic?
 
 BIOMASS FH estimates *top canopy height*, and there is no a priori answer to
@@ -445,6 +497,10 @@ Per scene, in `outputs/<site>/<scene>/`:
 | `fig06_shift_search.png` | the co-registration objective surface and its verdict |
 | `fig07_als_statistic.png` | agreement by choice of ALS aggregate |
 | `fig08_quality_classes.png` | error by BIOMASS quality-layer class |
+
+The maps show paired cells only; see
+[Why the maps have gaps](#why-the-maps-have-gaps) for what the white pixels
+are.
 
 Pooled across every scene, in `outputs/_combined/`:
 
