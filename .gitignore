@@ -5,3 +5,4 @@ __pycache__/
 03_processed_Luki2025/
 03_processed_Mbalmayo/
 /data
+outputs_eth/*/paired_cells_eth.csv

@@ -169,6 +169,11 @@ ETH_DIR = ROOT / "data" / "eth"
 #: Degrees added around the ALS outline when clipping.
 ETH_BUFFER_DEG = 0.02
 
+#: Where the ETH-vs-ALS results go. Deliberately a separate tree: 03_combine.py
+#: pools every ``paired_cells.csv`` it finds under OUTPUT_DIR, and these pairs
+#: live on a different grid, so they must not be swept into that sample.
+ETH_OUTPUT_DIR = ROOT / "outputs_eth"
+
 #: The product is delivered as uint8 with 255 as no-data, so heights are whole
 #: metres in 0-254. Values above this are treated as no-data.
 ETH_HEIGHT_MAX = 254.0
