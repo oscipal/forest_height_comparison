@@ -1,10 +1,13 @@
-# ALS canopy height vs. ESA BIOMASS L2A forest height
+# ALS canopy height vs. spaceborne forest height products
 
-Compares airborne laser scanning (ALS) canopy height models from three central
-African forest sites against the ESA BIOMASS Level-2a forest height product: it
-downloads the BIOMASS scenes from the ESA MAAP catalogue, co-registers them with
-the ALS reference, reports the standard validation statistics per scene, and
-pools every scene into a combined analysis.
+Airborne laser scanning (ALS) from three central African forest sites, used as
+the reference for two spaceborne canopy height products: the **ESA BIOMASS
+Level-2a forest height** product and the **ETH global 10 m canopy height** map
+(Lang et al. 2023). The pipeline downloads both products, co-registers them with
+the ALS, reports the standard validation statistics per scene and per site, and
+pools everything into a combined analysis.
+
+![Processing pipeline](docs/pipeline_slide.png)
 
 ## Quick start
 
@@ -22,7 +25,8 @@ python 03_combine.py                               # pooled, all-scene results
 ```
 
 Per-scene results land in `outputs/<site>/<scene>/`, pooled results in
-`outputs/_combined/`.
+`outputs/_combined/`, and the ETH-on-its-own-grid comparison in
+`outputs_eth/<site>/`.
 
 Sites are **discovered, not configured**: every `03_processed_<site>` folder in
 the repository is picked up automatically, so adding a fourth site means
@@ -30,8 +34,8 @@ dropping in its folder and re-running. `--site <name>` restricts any step.
 
 ## Data
 
-The repository holds code and results. **Neither input dataset is included**, for
-different reasons.
+The repository holds code and results. **None of the three input datasets is
+included**, for different reasons.
 
 **ALS products — not redistributable.** Access is closed (see References), so
 `03_processed_*/` is gitignored. To reproduce, place one folder per site at the
@@ -50,8 +54,14 @@ pattern, so the name is the only registration step. Each folder needs:
 **BIOMASS products — freely available but bulky**, so `data/` is gitignored.
 Step 1 downloads them; re-running it is the intended way to obtain them.
 
+**ETH canopy height — freely available and small**, because step 1b clips it to
+the footprints rather than fetching whole tiles. Also under `data/`, so also
+gitignored, and also re-obtained by re-running the step.
+
 `outputs/` **is** tracked — the figures and metric tables are the deliverable of
-this repository.
+this repository. So is `outputs_eth/`, except for its per-cell
+`paired_cells_eth.csv` tables, which run to tens of megabytes because a 10 m
+grid has a hundred times the cells of a 93 m one.
 
 ## The sites
 
@@ -70,26 +80,7 @@ All three were processed with the Global Canopy Atlas ALS pipeline v1.1.0
 (Fischer et al. 2024), so the products and masks mean the same thing at every
 site.
 
-## The BIOMASS scenes
-
-Seven `FP_FH__L2A` scenes cover the three footprints; six yield a usable
-comparison.
-
-| Site | Scene sensing window | Gap after ALS | Paired cells |
-|---|---|---|---|
-| Loundoungou | 19–31 May 2026 | ~14 months | 1945 |
-| Loundoungou | 9–21 Jun 2026 | ~15 months | 1056 |
-| Luki2025 | 12–24 Dec 2025 | ~2 months | *no valid data over the footprint* |
-| Luki2025 | 15–27 Dec 2025 | ~2 months | 313 |
-| Luki2025 | 14–26 Jan 2026 | ~3 months | 342 |
-| Mbalmayo | 24 Nov – 6 Dec 2025 | ~21 months | 789 |
-| Mbalmayo | 15–27 Dec 2025 | ~22 months | 482 |
-
-The skipped Luki scene overlaps the footprint by bounding box, but its usable
-swath lies elsewhere — every FH pixel over the site is no-data. The script
-detects this and moves on.
-
-## Which ALS product, and why
+## The ALS reference: which product, and why
 
 `chm_lspikefree.tif` — the locally adaptive spike-free canopy height model —
 with `mask_combined.tif` applied.
@@ -113,11 +104,50 @@ On the BIOMASS side the comparison uses the `FP_FH__L2A` product type
 `FP_GN__L2A` (ground notch) and `FP_FD__L2A` (forest disturbance) are different
 quantities.
 
+## The BIOMASS scenes
+
+Seven `FP_FH__L2A` scenes cover the three footprints; six yield a usable
+comparison.
+
+| Site | Scene sensing window | Gap after ALS | Paired cells |
+|---|---|---|---|
+| Loundoungou | 19–31 May 2026 | ~14 months | 1945 |
+| Loundoungou | 9–21 Jun 2026 | ~15 months | 1056 |
+| Luki2025 | 12–24 Dec 2025 | ~2 months | *no valid data over the footprint* |
+| Luki2025 | 15–27 Dec 2025 | ~2 months | 313 |
+| Luki2025 | 14–26 Jan 2026 | ~3 months | 342 |
+| Mbalmayo | 24 Nov – 6 Dec 2025 | ~21 months | 789 |
+| Mbalmayo | 15–27 Dec 2025 | ~22 months | 482 |
+
+The skipped Luki scene overlaps the footprint by bounding box, but its usable
+swath lies elsewhere — every FH pixel over the site is no-data. The script
+detects this and moves on.
+
+## The ETH global canopy height map
+
+[Lang et al. (2023)](https://doi.org/10.1038/s41559-023-02206-6) published a
+global 10 m canopy top height map regressed from Sentinel-2 with GEDI as the
+training reference, representative of **2020**. It is included here as a second
+spaceborne product, so that BIOMASS is judged against something other than the
+ALS alone.
+
+`01b_download_eth.py` fetches it. The published tiles are 3° × 3° cloud-optimised
+GeoTIFFs of roughly 400 MB each, but because they are COGs the script reads only
+the window covering each ALS outline straight over HTTP — under 1 MB per site
+instead of 1.3 GB. No account and no token: the data is CC BY 4.0.
+
+```bash
+python 01b_download_eth.py --list-only   # report the tiles each site needs
+python 01b_download_eth.py               # clip them into data/eth/<site>/
+```
+
 ## Method: resampling and co-registration
 
-The two datasets differ by a factor of ~93 in cell size and sit in different
-coordinate systems, so they have to be brought onto one grid before anything can
-be compared. Every choice below follows from one decision.
+The ALS reference and the BIOMASS product differ by a factor of ~93 in cell size
+and sit in different coordinate systems, so they have to be brought onto one grid
+before anything can be compared. Every choice below follows from one decision.
+The same machinery is reused for the ETH product, which needs no separate method
+section: only the target grid changes.
 
 ![Processing pipeline](docs/pipeline.png)
 
@@ -270,7 +300,8 @@ The pipeline was tested end to end against a synthetic BIOMASS-like product
 built from the ALS data with a **known** 40 m east / 20 m south geolocation
 error, a known bias and scale, and known noise. It recovered the shift to within
 1.5 m (one fine cell) and the injected slope, intercept and residual spread to
-two decimals.
+two decimals. That harness is not part of this repository, so the check is not
+reproducible from a fresh clone.
 
 ## Results
 
@@ -327,6 +358,26 @@ the canopy.
 The three sites also differ in ALS-to-BIOMASS time gap (2, 14 and 21 months),
 which is confounded with site throughout — see the caveats.
 
+### Which ALS statistic?
+
+BIOMASS FH estimates *top canopy height*, and there is no a priori answer to
+which ALS aggregate that corresponds to over a ~93 m cell. The script computes
+all of them and reports the agreement for each, so the choice is made from
+evidence. On the pooled sample:
+
+| ALS statistic | bias | MAE | RMSE | r |
+|---|---|---|---|---|
+| **p90** | **−4.36 m** | **5.57 m** | **7.58 m** | 0.58 |
+| p95 | −6.60 m | 7.13 m | 9.15 m | 0.55 |
+| p50 | +6.18 m | 7.37 m | 9.30 m | 0.59 |
+| mean | +7.17 m | 8.03 m | 9.54 m | 0.59 |
+| p99 | −9.87 m | 10.01 m | 11.91 m | 0.48 |
+| max | −12.25 m | 12.31 m | 14.05 m | 0.43 |
+
+p90 minimises both RMSE and |bias| and is the default (`--primary-stat`). Note
+that the correlation is nearly flat across candidates — the choice moves the
+*level*, not the strength of the relationship.
+
 ### Why the maps have gaps
 
 `fig01_maps.png` draws only the cells that survived step 5, so every white pixel
@@ -379,33 +430,17 @@ flight polygon inside the rectangular raster window.
 Running with `--quality-max none` fills the maps in completely; what that costs
 in bias is in `metrics_by_quality_class.csv` and `fig08_quality_classes.png`.
 
-## A second product: ETH global canopy height
+### Two grids, two questions
 
-[Lang et al. (2023)](https://doi.org/10.1038/s41559-023-02206-6) published a
-global 10 m canopy top height map regressed from Sentinel-2 with GEDI as the
-training reference, representative of **2020**. It is included here as a second
-spaceborne product, so that BIOMASS is judged against something other than the
-ALS alone.
-
-`01b_download_eth.py` fetches it. The published tiles are 3° × 3° cloud-optimised
-GeoTIFFs of roughly 400 MB each, but because they are COGs the script reads only
-the window covering each ALS outline straight over HTTP — under 1 MB per site
-instead of 1.3 GB. No account and no token: the data is CC BY 4.0.
-
-```bash
-python 01b_download_eth.py --list-only   # report the tiles each site needs
-python 01b_download_eth.py               # clip them into data/eth/<site>/
-```
-
-The product is compared on **two different grids**, because the two comparisons
-answer different questions:
+The ETH map is compared on **two different grids**, because the two comparisons
+answer different things:
 
 | Where | Script | Question |
 |---|---|---|
 | BIOMASS ~93 m grid | `02_compare.py` | How does BIOMASS compare with ETH, on one grid, over one common set of cells? |
 | ETH ~9.3 m grid | `02b_compare_eth.py` | How good is ETH at its own resolution, against ALS? |
 
-### On the BIOMASS grid
+### The second product: ETH on the BIOMASS grid
 
 ETH is aggregated up to the BIOMASS cells exactly as the ALS is — the same fine
 grid, the same block reduction, the same `--min-coverage` rule. It is aggregated
@@ -448,7 +483,7 @@ Within any one site it tracks the canopy less well.
 Mbalmayo disagreement is not a property of the forest, since the ALS is the same
 in both comparisons.
 
-### On the ETH grid
+### ETH against ALS on its own 10 m grid
 
 `02b_compare_eth.py` aggregates the 1 m ALS up to the ~9.3 m ETH cells — one run
 per site, not per scene, since the ETH map is a single global layer. Results go
@@ -466,40 +501,6 @@ result rather than a contradiction: a 10 m cell resolves individual crowns and
 canopy gaps that a Sentinel-2 regression cannot reproduce, and averaging into
 93 m cells removes most of that variance. The maps show it directly — the ALS
 panel is grainy where the ETH panel is smooth.
-
-### Caveats specific to this product
-
-* **The time gap is much larger than for BIOMASS.** The map represents 2020; the
-  ALS is from Feb 2024 (Mbalmayo), Mar 2025 (Loundoungou) and Oct 2025 (Luki).
-  That is a 4–6 year gap, against 2–21 months for the BIOMASS scenes.
-* **Heights are quantised to whole metres** — the product is uint8 with 255 as
-  no-data. This puts a floor of about 0.29 m on any RMSE against it, far below
-  the errors of interest but visible as banding in the scatter plots.
-* **A different height definition again.** ETH is trained on GEDI, so it targets
-  something closer to RH98 than to the ALS first-return top.
-* **Saturation over tall canopy is a documented weakness** of this product, and
-  these sites sit squarely in that regime. The OLS slope of 0.25 against ALS p90
-  is consistent with it.
-
-## Which ALS statistic?
-
-BIOMASS FH estimates *top canopy height*, and there is no a priori answer to
-which ALS aggregate that corresponds to over a ~93 m cell. The script computes
-all of them and reports the agreement for each, so the choice is made from
-evidence. On the pooled sample:
-
-| ALS statistic | bias | MAE | RMSE | r |
-|---|---|---|---|---|
-| **p90** | **−4.36 m** | **5.57 m** | **7.58 m** | 0.58 |
-| p95 | −6.60 m | 7.13 m | 9.15 m | 0.55 |
-| p50 | +6.18 m | 7.37 m | 9.30 m | 0.59 |
-| mean | +7.17 m | 8.03 m | 9.54 m | 0.59 |
-| p99 | −9.87 m | 10.01 m | 11.91 m | 0.48 |
-| max | −12.25 m | 12.31 m | 14.05 m | 0.43 |
-
-p90 minimises both RMSE and |bias| and is the default (`--primary-stat`). Note
-that the correlation is nearly flat across candidates — the choice moves the
-*level*, not the strength of the relationship.
 
 ## Statistics: how each one is computed and what it means
 
@@ -605,6 +606,9 @@ Per scene, in `outputs/<site>/<scene>/`:
 | `fig06_shift_search.png` | the co-registration objective surface and its verdict |
 | `fig07_als_statistic.png` | agreement by choice of ALS aggregate |
 | `fig08_quality_classes.png` | error by BIOMASS quality-layer class |
+| `fig09_biomass_vs_eth.png` | BIOMASS against ETH, both on the BIOMASS grid |
+| `fig10_eth_vs_als.png` | ETH against ALS on the BIOMASS grid |
+| `fig11_eth_maps.png` | ALS, aggregated ETH and their difference |
 
 The maps show paired cells only; see
 [Why the maps have gaps](#why-the-maps-have-gaps) for what the white pixels
@@ -622,6 +626,9 @@ Pooled across every scene, in `outputs/_combined/`:
 | `fig08_quality_classes_combined.png` | pooled error by quality class |
 | `fig09_per_scene.png` | bias, RMSE and r for each of the six scenes |
 | `fig10_per_site.png` | the same, pooled within each site |
+
+Per site, in `outputs_eth/<site>/` — the ETH product on its own 10 m grid,
+figures 1 to 5 and 7 as above, with ETH in place of BIOMASS.
 
 Maps have no pooled counterpart by design: the scenes sit on different grids in
 different countries, so there is no shared space to draw them in.
@@ -660,7 +667,8 @@ bgt/coreg.py               fine grid, block aggregation, shift search
 bgt/metrics.py             validation statistics
 bgt/viz.py                 figure style and per-scene plots
 bgt/viz_combined.py        pooled, multi-scene plots
-docs/pipeline.{png,svg}    the processing-pipeline diagram
+docs/pipeline.{png,svg}    the detailed processing-pipeline diagram
+docs/pipeline_slide.*      a simplified six-step diagram, for slides
 03_processed_<site>/       the ALS products (input) -- gitignored, supply your own
 data/biomass/<site>/       downloaded BIOMASS products -- gitignored, fetched by step 1
 outputs/<site>/<scene>/    per-scene figures and tables
@@ -690,6 +698,23 @@ data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
   specification — worth confirming against the format spec before publishing.
   The metrics are always reported per quality class so the choice stays
   checkable; `--quality-max none` disables the filter.
+* **The ETH time gap is far larger still.** That map represents 2020, against
+  ALS from Feb 2024 (Mbalmayo), Mar 2025 (Loundoungou) and Oct 2025 (Luki) — a
+  4–6 year gap. Any apparent advantage it has over BIOMASS could be luck rather
+  than skill, and the gap is confounded with site in exactly the same way.
+* **ETH heights are quantised to whole metres** — the product is uint8 with 255
+  as no-data. This puts a floor of about 0.29 m on any RMSE against it, far
+  below the errors of interest but visible as banding in the scatter plots.
+* **A third height definition.** ETH is trained on GEDI, so it targets something
+  closer to RH98 than to the ALS first-return top — different again from both
+  the ALS and the BIOMASS quantity.
+* **Saturation over tall canopy is a documented weakness of ETH**, and these
+  sites sit squarely in that regime. Its OLS slope of 0.25 against ALS p90 is
+  consistent with that.
+* **ETH is aggregated at nominal geolocation.** The shift search is run for the
+  ALS only; no co-registration is attempted for ETH on either grid. Its
+  geolocation is therefore assumed rather than checked
+  (`02b_compare_eth.py --shift-search` turns the search on if you want it).
 * **Spatial autocorrelation.** Cell counts are treated as sample sizes
   throughout. Neighbouring BIOMASS cells are not independent, so confidence
   intervals derived from n would be optimistic. The metrics reported here are
@@ -708,6 +733,9 @@ products carry ESA's own terms.
 * Fischer, F. J., Jackson, T., Vincent, G., & Jucker, T. (2024). Robust
   characterisation of forest structure from airborne laser scanning.
   *Methods in Ecology and Evolution*. <https://doi.org/10.1111/2041-210X.14416>
+* Lang, N., Jetz, W., Schindler, K., & Wegner, J. D. (2023). A high-resolution
+  canopy height model of the Earth. *Nature Ecology & Evolution*, 7, 1778–1789.
+  <https://doi.org/10.1038/s41559-023-02206-6>
 * ESA Biomass Level 2A product catalogue:
   <https://earth.esa.int/eogateway/catalog/biomass-level-2a>
 * ESA MAAP data access:
