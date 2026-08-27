@@ -397,7 +397,7 @@ Per scene, in `outputs/<site>/<scene>/`:
 | File | Contents |
 |---|---|
 | `paired_cells.csv` | one row per paired cell — the raw material of every figure |
-| `summary.csv` | the headline metrics for the scene |
+| `metrics_three_way.csv` | the BIOMASS, ETH and ALS comparisons over the common three-way cell set |
 | `metrics_by_als_stat.csv` | figure 8 |
 | `metrics_by_height_bin.csv` | the height-stratified table behind figure 4 |
 | `metrics_by_quality_class.csv` | figure 9 |

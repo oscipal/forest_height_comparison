@@ -133,8 +133,8 @@ ALS alone.
 
 `01b_download_eth.py` fetches it. The published tiles are 3° × 3° cloud-optimised
 GeoTIFFs of roughly 400 MB each, but because they are COGs the script reads only
-the window covering each ALS outline straight over HTTP — under 1 MB per site
-instead of 1.3 GB. No account and no token: the data is CC BY 4.0.
+the window covering each ALS outline straight over HTTP — 0.3 MB per site,
+height and standard-deviation layers together, instead of whole tiles. No account and no token: the data is CC BY 4.0.
 
 ```bash
 python 01b_download_eth.py --list-only   # report the tiles each site needs
@@ -314,9 +314,12 @@ reproducible from a fresh clone.
 
 ## Results
 
-**No shift was applied to any of the six scenes** — every one failed the checks
-above, so all results are at the nominal geolocation. The reason per scene is in
-the `shift_verdict` column of `outputs/summary_all_products.csv`.
+**No shift was applied to any of the six scenes**, so all results are at the
+nominal geolocation. Five scenes returned an optimum that failed one of the
+checks above; on the sixth (Mbalmayo 2025-12-15) the eroded search set was empty,
+so the search never ran and that scene has no `fig06_shift_search.png`. The
+reason per scene is in the `shift_verdict` column of
+`outputs/summary_all_products.csv`.
 
 ### Pooled over all sites and scenes
 
@@ -326,7 +329,7 @@ ALS p90 per cell, quality-filtered, n = 4927 cells:
 |---|---|
 | ALS reference | 37.12 ± 6.20 m |
 | BIOMASS FH | 32.58 ± 7.19 m |
-| **bias** | **−4.55 m** (−12.2 %) |
+| **bias** | **−4.54 m** (−12.2 %) |
 | MAE | 5.68 m |
 | **RMSE** | **7.69 m** (20.7 %) |
 | centred RMSE | 6.20 m |
@@ -393,27 +396,37 @@ that the correlation is nearly flat across candidates — the choice moves the
 is a cell that failed one of its three conditions. Which condition dominates
 differs sharply between the sites:
 
-| Scene | paired | rejected: quality > 2.0 | rejected: ALS coverage < 90 % | rejected: FH no-data |
-|---|---|---|---|---|
-| Loundoungou 2026-05-19 | 1945 | 0 | 206 | 0 |
-| Loundoungou 2026-06-09 | 1056 | 70 | 89 | 832 |
-| Luki 2025-12-15 | 313 | 98 | 71 | 0 |
-| Luki 2026-01-14 | 342 | 73 | 112 | 0 |
-| Mbalmayo 2025-11-24 | 789 | 939 | 166 | 0 |
-| Mbalmayo 2025-12-15 | 482 | 1059 | 92 | 199 |
+| Scene | cells in window | outside ALS footprint | FH no-data | quality > 2.0 | ALS coverage < 90 % | kept |
+|---|---|---|---|---|---|---|
+| Loundoungou 2026-05-19 | 4556 | 2402 | 0 | 0 | 209 | 1945 |
+| Loundoungou 2026-06-09 | 4556 | 2402 | 933 | 74 | 91 | 1056 |
+| Luki 2025-12-15 | 1020 | 481 | 0 | 154 | 72 | 313 |
+| Luki 2026-01-14 | 1020 | 484 | 0 | 80 | 114 | 342 |
+| Mbalmayo 2025-11-24 | 2250 | 162 | 0 | 1106 | 193 | 789 |
+| Mbalmayo 2025-12-15 | 2250 | 155 | 250 | 1256 | 107 | 482 |
 
-(The `paired` column is the row count of each `paired_cells.csv`. Every
-rejection is attributed to a single cause; cells lying entirely outside the
-flight polygon, with no ALS at all, are not counted as rejections.)
+The tests are applied in the order of the columns and each cell is attributed to
+the **first** test it fails, so every row sums to the analysis window. Two
+further causes — an FH value outside 0–100 m, and no usable ALS aggregate
+despite sufficient coverage — are zero in every scene and are omitted here. The
+counts are `exclusion_counts.csv` per scene and
+`outputs/_combined/exclusion_counts_all.csv` pooled, drawn as
+`fig12_exclusions.png` and, cell by cell in space, `fig13_mask_map.png`.
+
+The first column of rejections is geometry, not data loss: the analysis window
+is the rectangle around the footprint, and the flight polygon inside it rarely
+fills it.
 
 **The quality filter is the dominant term at Mbalmayo and Luki.** The quality
-layer behaves like a different variable at each site. Over Loundoungou its 95th
-percentile is 1.11 — the whole footprint sits below the 2.0 threshold and
-essentially nothing is cut, which is why that map is solid. Over Mbalmayo the
-*median* is 3.5 and 9.6 in the two scenes, so more than half of the footprint
-falls in the failed-retrieval tail and is removed.
+layer behaves like a different variable at each site. Over the Loundoungou
+2026-05-19 scene its 95th percentile is 1.11 — the whole footprint sits below the
+2.0 threshold and nothing at all is cut, which is why that map is solid. Over
+Mbalmayo the *median* is 3.5 and 9.6 in the two scenes, and the filter removes
+53 % and 68 % of the cells that reach it: more than half the footprint falls in
+the failed-retrieval tail.
 
-The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene:
+The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene,
+splitting the cells that pass every *other* test by their quality value:
 
 | | n | ALS p90 | BIOMASS FH | bias |
 |---|---|---|---|---|
@@ -421,8 +434,12 @@ The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene:
 | quality > 2 (rejected) | 939 | 30.6 m | 12.0 m | **−18.5 m** |
 
 The ALS canopy is the same height in both groups; BIOMASS reports ~12 m where it
-reports ~30 m next door. These are retrieval failures, not short canopy — the
-same bimodality the threshold was derived from.
+reports ~25 m next door. The 2025-12-15 scene splits the same way: 1059 rejected
+cells under 30.4 m of ALS canopy, for which BIOMASS reports 9.0 m. These are
+retrieval failures, not short canopy — the same bimodality the threshold was
+derived from. (The 939 and 1059 here are smaller than the quality column of the
+table above, which is a funnel: it also carries the rejected cells that would
+have failed the coverage test as well.)
 
 **Loosening the threshold only makes agreement worse.** Re-running Luki and
 Mbalmayo at a range of thresholds adds cells monotonically and degrades every
@@ -447,16 +464,14 @@ quality layer says to trust, not the product's accuracy everywhere it reports a
 value. Quote the threshold whenever you quote the RMSE.
 
 **Coverage < 90 % explains the ragged edges** and some of Luki's interior
-speckle. A ~93 m cell needs 90 % of its area in valid, unmasked ALS, so
-scattered 1 m losses take out whole cells: `mask_combined` removes 4.4 % of ALS
-pixels at Mbalmayo and 3.3 % at Luki (mostly `mask_pd02`, pulse density < 2)
-against 0.9 % at Loundoungou. At Mbalmayo a further 14.5 % of cells are
-partially covered but below the threshold.
+speckle — 72 to 209 cells per scene. A ~93 m cell needs 90 % of its area in
+valid, unmasked ALS, so scattered 1 m losses take out whole cells:
+`mask_combined` removes 4.4 % of ALS pixels at Mbalmayo and 3.3 % at Luki
+(mostly `mask_pd02`, pulse density < 2) against 0.9 % at Loundoungou.
 
 **FH no-data** matters only for the Mbalmayo 2025-12-15 and Loundoungou
-2026-06-09 scenes, where the product itself is incomplete over the footprint.
-The irregular *outer* boundary of every map is not a gap at all — it is the
-flight polygon inside the rectangular raster window.
+2026-06-09 scenes, where the product itself is incomplete over the footprint —
+250 and 933 cells.
 
 Running with `--quality-max none` fills the maps in completely; what that costs
 in bias is in `metrics_by_quality_class.csv` and `fig08_quality_classes.png`.
@@ -510,7 +525,7 @@ separates the three sites more strongly, which inflates r once they are pooled.
 Within any one site it tracks the canopy less well.
 
 **The two products fail in opposite directions at Mbalmayo**: BIOMASS reads
-6.8 m low, ETH 4.5 m high. Everywhere else both read low. Whatever drives the
+7.0 m low, ETH 4.2 m high. Everywhere else both read low. Whatever drives the
 Mbalmayo disagreement is not a property of the forest, since the ALS is the same
 in both comparisons.
 
@@ -579,7 +594,7 @@ cell as one observation. Notation used throughout:
 > much of the reference's variation the product recovers. Within one homogeneous
 > site the ALS p90 varies by only ~3 m (Loundoungou), which is comparable to the
 > product's own noise, so r is low almost by construction. Pooling the three
-> sites widens the reference range to SD 6.2 m and r rises from 0.25–0.36 to
+> sites widens the reference range to SD 6.2 m and r rises from 0.25–0.35 to
 > 0.58 — without the product having become any more accurate. **Read bias and
 > RMSE for accuracy; read r only across a real height gradient.**
 
@@ -600,7 +615,7 @@ cell as one observation. Notation used throughout:
 
 > **Why both are reported.** The gap between them is diagnostic rather than
 > redundant. RMA slope is OLS slope divided by r, so when correlation is weak the
-> two diverge sharply — in the pooled results, OLS 0.67 against RMA 1.15. Quoting
+> two diverge sharply — in the pooled results, OLS 0.67 against RMA 1.16. Quoting
 > either alone would misrepresent the data: the OLS slope confounds true scale
 > error with noise-driven attenuation, while the RMA slope is unstable when r is
 > low. Read them together, and read the residual-vs-height figure, which shows
@@ -634,7 +649,7 @@ Per scene, in `outputs/<site>/<scene>/`:
 | `fig03_residuals.png` | residual vs. ALS height, with binned mean ± SD |
 | `fig04_distributions.png` | marginal histograms and empirical CDFs |
 | `fig05_bland_altman.png` | agreement plot with bias and limits of agreement |
-| `fig06_shift_search.png` | the co-registration objective surface and its verdict |
+| `fig06_shift_search.png` | the co-registration objective surface and its verdict — written only for the scenes where the search ran (five of six) |
 | `fig07_als_statistic.png` | agreement by choice of ALS aggregate |
 | `fig08_quality_classes.png` | error by BIOMASS quality-layer class |
 | `fig12_exclusions.png` | funnel of how many cells each filter removed |
@@ -707,7 +722,9 @@ docs/pipeline_slide.*      a simplified six-step diagram, for slides
 data/biomass/<site>/       downloaded BIOMASS products -- gitignored, fetched by step 1
 outputs/<site>/<scene>/    per-scene figures and tables
 outputs/_combined/         pooled figures and tables
+outputs/summary_all_products.csv   one row per scene: metrics and shift verdict
 outputs_eth/<site>/        ETH-vs-ALS results on the ETH grid
+outputs_eth/summary_eth_by_site.csv  one row per site, ETH on its own grid
 data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
 ```
 
