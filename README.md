@@ -324,43 +324,43 @@ ALS p90 per cell, quality-filtered, n = 4927 cells:
 
 | | |
 |---|---|
-| ALS reference | 36.94 ± 6.24 m |
+| ALS reference | 37.12 ± 6.20 m |
 | BIOMASS FH | 32.58 ± 7.19 m |
-| **bias** | **−4.36 m** (−11.8 %) |
-| MAE | 5.57 m |
-| **RMSE** | **7.58 m** (20.5 %) |
+| **bias** | **−4.55 m** (−12.2 %) |
+| MAE | 5.68 m |
+| **RMSE** | **7.69 m** (20.7 %) |
 | centred RMSE | 6.20 m |
-| Pearson r | 0.583 |
-| Spearman ρ | 0.547 |
-| CCC | 0.477 |
-| OLS / RMA slope | 0.67 / 1.15 |
-| 95 % limits of agreement | [−16.51, +7.78] m |
+| Pearson r | 0.580 |
+| Spearman ρ | 0.546 |
+| CCC | 0.466 |
+| OLS / RMA slope | 0.67 / 1.16 |
+| 95 % limits of agreement | [−16.70, +7.61] m |
 
 ### Per site
 
 | Site | scenes | n | ALS | BIOMASS | bias | RMSE | r |
 |---|---|---|---|---|---|---|---|
-| Loundoungou | 2 | 3001 | 39.26 ± 3.18 m | 37.03 ± 2.69 m | −2.23 m | 4.25 m (10.8 %) | 0.25 |
-| Luki2025 | 2 | 655 | 38.63 ± 8.53 m | 29.17 ± 7.31 m | −9.46 m | 13.51 m (35.0 %) | 0.26 |
-| Mbalmayo | 2 | 1271 | 30.59 ± 5.93 m | 23.81 ± 5.14 m | −6.78 m | 9.26 m (30.3 %) | 0.36 |
+| Loundoungou | 2 | 3001 | 39.41 ± 3.16 m | 37.03 ± 2.69 m | −2.37 m | 4.32 m (11.0 %) | 0.25 |
+| Luki2025 | 2 | 655 | 38.88 ± 8.50 m | 29.17 ± 7.31 m | −9.71 m | 13.67 m (35.2 %) | 0.26 |
+| Mbalmayo | 2 | 1271 | 30.83 ± 5.88 m | 23.81 ± 5.14 m | −7.01 m | 9.43 m (30.6 %) | 0.35 |
 
 Three things are worth reading carefully:
 
 **Pooling raises the correlation far above any single site** — r = 0.58 pooled
-against 0.25–0.36 within sites. This is the height-range effect, not better
-performance: pooled ALS p90 has an SD of 6.2 m against ~3 m at Loundoungou.
+against 0.25–0.35 within sites. This is the height-range effect, not better
+performance: pooled ALS p90 has an SD of 6.2 m against ~3.2 m at Loundoungou.
 Within one uniform site there is barely any height signal for BIOMASS to track.
 The pooled r is the fairer measure of how the product behaves across a real
 landscape gradient; the within-site r is close to meaningless.
 
-**BIOMASS underestimates at every site and in every scene**, from −1.3 m to
-−13.5 m, and the pooled RMA slope of 1.15 against an OLS slope of 0.67 indicates
+**BIOMASS underestimates at every site and in every scene**, from −1.4 m to
+−13.8 m, and the pooled RMA slope of 1.16 against an OLS slope of 0.67 indicates
 the product compresses the height range. The residual-vs-height figure shows the
 same thing directly and consistently across all three sites: BIOMASS reads high
 over short canopy and increasingly low over tall canopy.
 
 **Scene-to-scene spread within a site is large** — Luki's two usable scenes
-differ by 7.8 m in bias (−13.5 vs −5.8 m) despite being one month apart over
+differ by 7.8 m in bias (−13.8 vs −6.0 m) despite being one month apart over
 identical forest. Whatever drives that is a property of the retrieval, not of
 the canopy.
 
@@ -376,12 +376,12 @@ evidence. On the pooled sample:
 
 | ALS statistic | bias | MAE | RMSE | r |
 |---|---|---|---|---|
-| **p90** | **−4.36 m** | **5.57 m** | **7.58 m** | 0.58 |
-| p95 | −6.60 m | 7.13 m | 9.15 m | 0.55 |
-| p50 | +6.18 m | 7.37 m | 9.30 m | 0.59 |
+| **p90** | **−4.54 m** | **5.68 m** | **7.69 m** | 0.58 |
+| p95 | −6.78 m | 7.27 m | 9.28 m | 0.54 |
+| p50 | +6.08 m | 7.30 m | 9.25 m | 0.59 |
 | mean | +7.17 m | 8.03 m | 9.54 m | 0.59 |
-| p99 | −9.87 m | 10.01 m | 11.91 m | 0.48 |
-| max | −12.25 m | 12.31 m | 14.05 m | 0.43 |
+| p99 | −10.05 m | 10.18 m | 12.06 m | 0.48 |
+| max | −12.77 m | 12.82 m | 14.54 m | 0.43 |
 
 p90 minimises both RMSE and |bias| and is the default (`--primary-stat`). Note
 that the correlation is nearly flat across candidates — the choice moves the
@@ -417,8 +417,8 @@ The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene:
 
 | | n | ALS p90 | BIOMASS FH | bias |
 |---|---|---|---|---|
-| quality ≤ 2 (kept) | 789 | 30.6 m | 25.0 m | −5.6 m |
-| quality > 2 (rejected) | 939 | 30.3 m | 12.0 m | **−18.2 m** |
+| quality ≤ 2 (kept) | 789 | 30.8 m | 25.0 m | −5.8 m |
+| quality > 2 (rejected) | 939 | 30.6 m | 12.0 m | **−18.5 m** |
 
 The ALS canopy is the same height in both groups; BIOMASS reports ~12 m where it
 reports ~30 m next door. These are retrieval failures, not short canopy — the
@@ -484,27 +484,27 @@ Pooled over all six scenes, ALS p90 as the reference, n = 4916 cells:
 
 | | bias | MAE | RMSE | Pearson r | RMA slope |
 |---|---|---|---|---|---|
-| BIOMASS vs ALS | −4.38 m | 5.57 m | 7.57 m | 0.583 | 1.157 |
-| **ETH vs ALS** | **−1.23 m** | **4.33 m** | **6.06 m** | 0.387 | 0.639 |
-| BIOMASS vs ETH | −3.14 m | 5.22 m | 7.35 m | 0.407 | 1.812 |
+| BIOMASS vs ALS | −4.56 m | 5.67 m | 7.68 m | 0.580 | 1.166 |
+| **ETH vs ALS** | **−1.41 m** | **4.35 m** | **6.07 m** | 0.385 | 0.643 |
+| BIOMASS vs ETH | −3.15 m | 5.22 m | 7.35 m | 0.407 | 1.813 |
 
 Per site, against ALS p90:
 
 | Site | n | BIOMASS bias | BIOMASS RMSE | BIOMASS r | ETH bias | ETH RMSE | ETH r |
 |---|---|---|---|---|---|---|---|
-| Loundoungou | 2998 | −2.24 m | 4.25 m | 0.25 | −1.81 m | 3.37 m | 0.46 |
-| Luki2025 | 652 | −9.55 m | 13.50 m | 0.25 | −9.63 m | 12.08 m | 0.49 |
-| Mbalmayo | 1266 | −6.77 m | 9.25 m | 0.36 | **+4.46 m** | 6.36 m | 0.65 |
+| Loundoungou | 2998 | −2.38 m | 4.32 m | 0.25 | −1.95 m | 3.43 m | 0.46 |
+| Luki2025 | 652 | −9.80 m | 13.66 m | 0.25 | −9.86 m | 12.25 m | 0.48 |
+| Mbalmayo | 1266 | −7.01 m | 9.42 m | 0.35 | **+4.22 m** | 6.16 m | 0.65 |
 
 Three things stand out.
 
 **ETH has the lower RMSE at every site**, and the higher within-site correlation
-at every site — 0.46/0.49/0.65 against 0.25/0.25/0.36. On this evidence the
+at every site — 0.46/0.48/0.65 against 0.25/0.25/0.35. On this evidence the
 older, freely available Sentinel-2 product tracks the ALS better than the
 BIOMASS L2A retrieval does over these three forests.
 
-**The pooled correlation reverses that ranking** — 0.583 for BIOMASS against
-0.387 for ETH — and it is the pooled number that is misleading here, not the
+**The pooled correlation reverses that ranking** — 0.580 for BIOMASS against
+0.385 for ETH — and it is the pooled number that is misleading here, not the
 per-site ones. The same height-range effect described above is at work: BIOMASS
 separates the three sites more strongly, which inflates r once they are pooled.
 Within any one site it tracks the canopy less well.
