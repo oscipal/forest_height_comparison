@@ -424,6 +424,28 @@ The ALS canopy is the same height in both groups; BIOMASS reports ~12 m where it
 reports ~30 m next door. These are retrieval failures, not short canopy — the
 same bimodality the threshold was derived from.
 
+**Loosening the threshold only makes agreement worse.** Re-running Luki and
+Mbalmayo at a range of thresholds adds cells monotonically and degrades every
+metric monotonically with them:
+
+| Scene | | q ≤ 2 | q ≤ 5 | q ≤ 20 | no filter |
+|---|---|---|---|---|---|
+| Mbalmayo 2025-11-24 | n | 789 | 918 | 1237 | 1728 |
+| | RMSE | 8.58 m | 9.73 m | 11.91 m | 16.43 m |
+| Mbalmayo 2025-12-15 | n | 482 | 626 | 994 | 1541 |
+| | RMSE | 10.67 m | 12.78 m | 16.30 m | 19.90 m |
+| Luki 2025-12-15 | n | 313 | 342 | 386 | 411 |
+| | RMSE | 17.22 m | 17.67 m | 18.62 m | 19.84 m |
+| Luki 2026-01-14 | n | 342 | 353 | 370 | 415 |
+| | RMSE | 9.29 m | 9.39 m | 9.62 m | 11.57 m |
+
+That is the behaviour a genuinely informative quality layer should show, and it
+is the strongest evidence that 2.0 is not cherry-picking. But it cuts both ways:
+the headline accuracy is **conditional on the threshold** — a stricter cut would
+look better still — so these numbers describe agreement over the cells the
+quality layer says to trust, not the product's accuracy everywhere it reports a
+value. Quote the threshold whenever you quote the RMSE.
+
 **Coverage < 90 % explains the ragged edges** and some of Luki's interior
 speckle. A ~93 m cell needs 90 % of its area in valid, unmasked ALS, so
 scattered 1 m losses take out whole cells: `mask_combined` removes 4.4 % of ALS

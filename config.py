@@ -125,14 +125,26 @@ FH_MAX = 100.0
 #: Quality-layer filter: pixels are kept where ``quality <= FH_QUALITY_MAX``.
 #:
 #: The L2A quality layer is continuous, not a class code, and the annotation
-#: files label it only as "Forest height quality" without units. Its observed
-#: distribution over this site is sharply bimodal: a main population at or below
-#: ~1.14 and, after a clean empty gap, a tail from ~8 to 100. Cells in that tail
-#: carry a bias of -15 to -40 m against ALS, i.e. they are failed retrievals.
-#: A threshold of 2.0 sits inside the gap, so the exact value does not matter --
-#: anything between ~1.2 and ~8 separates the same two populations. Set to
-#: ``None`` to disable; the comparison always reports metrics stratified by
-#: quality so the choice stays visible and checkable.
+#: files label it only as "Forest height quality" without units.
+#:
+#: The threshold of 2.0 was derived at Loundoungou, where the distribution is
+#: sharply bimodal: a main population at or below ~1.14 and, after a clean empty
+#: gap, a tail from ~8 to 100 whose cells carry a -15 to -40 m bias against ALS.
+#: There, 2.0 sits inside the gap and its exact value does not matter.
+#:
+#: **The value distribution is not bimodal everywhere.** At Luki and Mbalmayo it
+#: is continuous (median 0.3-4.1, 90th percentile 31-50), so there is no empty
+#: gap for the threshold to sit in, and it removes 15-60 % of the in-footprint
+#: cells against 0-3 % at Loundoungou.
+#:
+#: The threshold still holds up there, but on outcome rather than on the shape
+#: of the histogram: at Mbalmayo the rejected cells sit under the same ALS
+#: canopy height as the kept ones (30.3 vs 30.6 m) while BIOMASS reports ~12 m
+#: against ~25 m, i.e. they are retrieval failures rather than short forest.
+#: See the exclusion section of README.md, and fig12/fig13 per scene.
+#:
+#: Set to ``None`` to disable; the comparison always reports metrics stratified
+#: by quality so the choice stays visible and checkable.
 FH_QUALITY_MAX = 2.0
 
 
