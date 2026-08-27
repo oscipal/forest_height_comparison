@@ -25,7 +25,7 @@ from pathlib import Path
 import pandas as pd
 
 import config
-from bgt import metrics, viz
+from bgt import coreg, metrics, viz
 from bgt import viz_combined as vizc
 
 
@@ -175,6 +175,24 @@ def main(argv: list[str] | None = None) -> int:
                                 subtitle=subtitle)
     vizc.plot_scene_metrics(per_scene, combined_dir / "fig09_per_scene.png",
                             subtitle=subtitle)
+    # Exclusion accounting, gathered from the per-scene CSVs written by step 2.
+    drop_rows = []
+    for path in sorted(args.out_dir.rglob("exclusion_counts.csv")):
+        if config.COMBINED_DIR_NAME in path.parts:
+            continue
+        row = pd.read_csv(path)
+        if args.site and row["site"].iloc[0] not in args.site:
+            continue
+        drop_rows.append(row)
+    if drop_rows:
+        drops = pd.concat(drop_rows, ignore_index=True)
+        drops["scene_label"] = drops["site"] + "  " + drops["biomass_date"].astype(str)
+        drops.to_csv(combined_dir / "exclusion_counts_all.csv", index=False)
+        vizc.plot_exclusions_by_scene(
+            drops, coreg.EXCLUSION_LABELS_BY_KEY, viz.EXCLUSION_COLORS,
+            combined_dir / "fig11_exclusions_by_scene.png", subtitle=subtitle,
+        )
+
     vizc.plot_site_metrics(per_site, combined_dir / "fig10_per_site.png",
                            subtitle=subtitle)
 

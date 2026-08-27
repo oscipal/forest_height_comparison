@@ -40,6 +40,68 @@ _EARTH_M_PER_DEG = 111_320.0
 
 
 # --------------------------------------------------------------------------- #
+# Why a cell is excluded
+# --------------------------------------------------------------------------- #
+#
+# Every cell of the analysis window carries exactly one code. The codes are
+# assigned in the order listed, so a cell that fails several tests is attributed
+# to the first one it fails -- which makes the counts additive and lets them be
+# read as a funnel from "every cell in the window" down to "paired".
+#
+# The ALS footprint test comes first deliberately: the window is a rectangle
+# around a scan that is rarely rectangular, so most of what it excludes was
+# never a candidate rather than a loss of usable data.
+
+KEPT = 0
+ALS_ABSENT = 1
+FH_NODATA = 2
+FH_OUT_OF_RANGE = 3
+FH_QUALITY = 4
+ALS_PARTIAL = 5
+ALS_STAT_MISSING = 6
+
+#: Ordered so that iteration yields the funnel from top to bottom.
+EXCLUSION_ORDER = [
+    ALS_ABSENT,
+    FH_NODATA,
+    FH_OUT_OF_RANGE,
+    FH_QUALITY,
+    ALS_PARTIAL,
+    ALS_STAT_MISSING,
+    KEPT,
+]
+
+EXCLUSION_LABELS = {
+    KEPT: "kept (paired)",
+    ALS_ABSENT: "outside ALS footprint",
+    FH_NODATA: "BIOMASS no-data",
+    FH_OUT_OF_RANGE: "BIOMASS height out of range",
+    FH_QUALITY: "BIOMASS quality above threshold",
+    ALS_PARTIAL: "ALS coverage below minimum",
+    ALS_STAT_MISSING: "ALS statistic unavailable",
+}
+
+#: Labels keyed by short name, in funnel order -- iteration order is what the
+#: exclusion chart uses to lay out its bars.
+EXCLUSION_LABELS_BY_KEY: dict[str, str] = {}
+
+#: Short keys for the CSV columns.
+EXCLUSION_KEYS = {
+    KEPT: "kept",
+    ALS_ABSENT: "als_absent",
+    FH_NODATA: "fh_nodata",
+    FH_OUT_OF_RANGE: "fh_out_of_range",
+    FH_QUALITY: "fh_quality_rejected",
+    ALS_PARTIAL: "als_coverage_low",
+    ALS_STAT_MISSING: "als_stat_missing",
+}
+
+EXCLUSION_LABELS_BY_KEY.update(
+    {EXCLUSION_KEYS[code]: EXCLUSION_LABELS[code] for code in EXCLUSION_ORDER}
+)
+
+
+# --------------------------------------------------------------------------- #
 # BIOMASS side
 # --------------------------------------------------------------------------- #
 
@@ -50,6 +112,7 @@ class BiomassFh:
 
     height: np.ndarray
     quality: np.ndarray | None
+    reject: np.ndarray  #: per-cell exclusion code, BIOMASS-side reasons only
     transform: Affine
     crs: CRS
     item_id: str
@@ -127,7 +190,11 @@ def load_fh(
             "fh_pixel_m_y": px_y,
         }
 
-    height[np.isfinite(height) & ((height < fh_min) | (height > fh_max))] = np.nan
+    # Record why each BIOMASS cell drops out, before the value is discarded.
+    reject = np.where(np.isfinite(height), KEPT, FH_NODATA).astype(np.uint8)
+    out_of_range = np.isfinite(height) & ((height < fh_min) | (height > fh_max))
+    reject[out_of_range] = FH_OUT_OF_RANGE
+    height[out_of_range] = np.nan
 
     quality = None
     if quality_path is not None:
@@ -153,7 +220,11 @@ def load_fh(
             print(f"  quality layer unreadable, continuing without it: {exc}")
 
     if quality is not None and quality_max is not None:
-        height[~(quality <= quality_max)] = np.nan
+        # `~(q <= max)` also catches a nan quality value, which is the intended
+        # conservative reading: unknown quality is not passing quality.
+        failed = (reject == KEPT) & ~(quality <= quality_max)
+        reject[failed] = FH_QUALITY
+        height[failed] = np.nan
 
     if not np.isfinite(height).any():
         return None
@@ -161,12 +232,50 @@ def load_fh(
     return BiomassFh(
         height=height,
         quality=quality,
+        reject=reject,
         transform=transform,
         crs=crs,
         item_id=Path(fh_path).parent.parent.name,
         source=Path(fh_path),
         meta=meta,
     )
+
+
+def exclusion_grid(
+    fh: BiomassFh,
+    coverage: np.ndarray,
+    als_stat: np.ndarray,
+    min_coverage: float = config.MIN_ALS_COVERAGE,
+) -> np.ndarray:
+    """One exclusion code per cell, combining the BIOMASS and ALS side tests.
+
+    Codes are assigned in ``EXCLUSION_ORDER``: each test only sees the cells
+    that survived the tests before it, so the resulting counts sum to the size
+    of the analysis window and read as a funnel.
+    """
+    reason = np.full(fh.shape, KEPT, dtype=np.uint8)
+
+    # 1. No ALS at all: the window is a rectangle, the scan usually is not.
+    reason[coverage <= 0.0] = ALS_ABSENT
+
+    # 2. BIOMASS-side reasons, for cells that do have ALS underneath them.
+    from_fh = (reason == KEPT) & (fh.reject != KEPT)
+    reason[from_fh] = fh.reject[from_fh]
+
+    # 3. Partial ALS coverage: some, but not enough to summarise the cell.
+    reason[(reason == KEPT) & (coverage < min_coverage)] = ALS_PARTIAL
+
+    # 4. Anything left without a usable ALS statistic (rare; belt and braces).
+    reason[(reason == KEPT) & ~np.isfinite(als_stat)] = ALS_STAT_MISSING
+    return reason
+
+
+def exclusion_counts(reason: np.ndarray) -> dict[str, int]:
+    """Cell counts per exclusion code, keyed by short name, funnel-ordered."""
+    return {
+        EXCLUSION_KEYS[code]: int((reason == code).sum())
+        for code in EXCLUSION_ORDER
+    }
 
 
 # --------------------------------------------------------------------------- #

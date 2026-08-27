@@ -268,6 +268,56 @@ def plot_scene_metrics(
     return _save(fig, out_path)
 
 
+def plot_exclusions_by_scene(
+    table: pd.DataFrame,
+    labels: dict[str, str],
+    colors: dict[str, str],
+    out_path: Path,
+    label_col: str = "scene_label",
+    subtitle: str = "",
+    grid_name: str = "BIOMASS",
+) -> Path:
+    """Where every scene's cells went, as a share of its analysis window.
+
+    Stacked to 100 % rather than to absolute counts: the windows differ in size
+    between sites, and the question here is what proportion of each scene is
+    lost to what, not which site has the bigger rectangle. Absolute counts are
+    in ``exclusion_counts_all.csv``.
+    """
+    keys = [k for k in labels if k in table.columns]
+    tbl = table.sort_values([label_col]).reset_index(drop=True)
+    totals = tbl[keys].sum(axis=1).replace(0, np.nan)
+    pos = np.arange(len(tbl))
+
+    fig, ax = plt.subplots(figsize=(10.4, 0.62 * len(tbl) + 3.0),
+                           constrained_layout=True)
+    left = np.zeros(len(tbl))
+    for key in keys:
+        share = 100.0 * tbl[key] / totals
+        ax.barh(pos, share, left=left, height=0.68, color=colors.get(key, INK_MUTED),
+                linewidth=0.8, edgecolor=SURFACE, label=labels[key])
+        for p, (s, l) in enumerate(zip(share, left)):
+            if s >= 6:  # only label a segment wide enough to hold the text
+                ax.annotate(f"{s:.0f}%", xy=(l + s / 2, p), ha="center",
+                            va="center", fontsize=7.5, color=INK_SECONDARY)
+        left = left + share.fillna(0).to_numpy()
+
+    ax.set_yticks(pos)
+    ax.set_yticklabels(tbl[label_col], fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 100)
+    ax.set_xlabel(f"share of the scene's analysis window (%)")
+    ax.grid(axis="y", visible=False)
+    for p, total in enumerate(tbl[keys].sum(axis=1)):
+        ax.annotate(f"{int(total):,} cells", xy=(100.6, p), va="center",
+                    fontsize=7.5, color=INK_MUTED)
+    ax.margins(x=0.12)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16 / (len(tbl) ** 0.5 + 1) - 0.06),
+              ncol=3, frameon=False)
+    _titleblock(fig, f"Where the {grid_name} cells go, scene by scene", subtitle)
+    return _save(fig, out_path)
+
+
 def plot_site_metrics(
     table: pd.DataFrame,
     out_path: Path,

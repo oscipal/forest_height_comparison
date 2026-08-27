@@ -615,6 +615,8 @@ Per scene, in `outputs/<site>/<scene>/`:
 | `fig06_shift_search.png` | the co-registration objective surface and its verdict |
 | `fig07_als_statistic.png` | agreement by choice of ALS aggregate |
 | `fig08_quality_classes.png` | error by BIOMASS quality-layer class |
+| `fig12_exclusions.png` | funnel of how many cells each filter removed |
+| `fig13_mask_map.png` | the analysis window, each cell coloured by why it was kept or dropped |
 | `fig09_biomass_vs_eth.png` | BIOMASS against ETH, both on the BIOMASS grid |
 | `fig10_eth_vs_als.png` | ETH against ALS on the BIOMASS grid |
 | `fig11_eth_maps.png` | ALS, aggregated ETH and their difference |
@@ -635,6 +637,7 @@ Pooled across every scene, in `outputs/_combined/`:
 | `fig08_quality_classes_combined.png` | pooled error by quality class |
 | `fig09_per_scene.png` | bias, RMSE and r for each of the six scenes |
 | `fig10_per_site.png` | the same, pooled within each site |
+| `fig11_exclusions_by_scene.png` | what share of each scene's window went where |
 
 Per site, in `outputs_eth/<site>/` — the ETH product on its own 10 m grid,
 figures 1 to 5 and 7 as above, with ETH in place of BIOMASS.

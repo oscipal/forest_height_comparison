@@ -6,8 +6,8 @@ results mean.
 
 Per-scene figures are written to `outputs/<site>/<scene>/` by `02_compare.py`
 (via `bgt/viz.py`); pooled figures to `outputs/_combined/` by `03_combine.py`
-(via `bgt/viz_combined.py`). Sections 2-10 cover the per-scene figures, section
-11 the pooled ones.
+(via `bgt/viz_combined.py`). Sections 2-12 cover the per-scene figures, section
+13 the pooled ones.
 
 ---
 
@@ -288,7 +288,63 @@ And the 2020 epoch means the ETH-to-ALS gap is larger than the BIOMASS-to-ALS
 gap at every site — four years at Mbalmayo, five at Loundoungou and Luki.
 
 ---
-## 11. Pooled figures (`outputs/_combined/`)
+
+## 11. `fig12_exclusions.png` — Where the BIOMASS cells go
+
+**Shows** a funnel accounting for every cell of the analysis window: how many
+were removed by each test, and how many survived into the paired sample.
+
+| Bar | Removed because |
+|---|---|
+| outside ALS footprint | the cell has no valid ALS underneath it at all. The analysis window is a rectangle; a scan rarely is, so this is geometry rather than data loss |
+| BIOMASS no-data | the FH raster carries its no-data value (−9999) there |
+| BIOMASS height out of range | the FH value is outside 0–100 m |
+| BIOMASS quality above threshold | the quality layer exceeds `--quality-max` (default 2.0) |
+| ALS coverage below minimum | some ALS is present, but less than `--min-coverage` (default 90 %) of the cell's area |
+| ALS statistic unavailable | no usable ALS aggregate despite sufficient coverage — a safety net that should normally read zero |
+| kept (paired) | survived every test; this is the sample every other figure uses |
+
+**How it is computed.** The tests are applied **in the order listed**, and each
+cell is attributed to the *first* test it fails. That makes the bars additive:
+they sum exactly to the size of the analysis window. The run asserts this
+reconciles with the pairing mask before writing anything, so the chart cannot
+drift from the sample it describes.
+
+The ALS-footprint test comes first deliberately. Most of what it removes was
+never a candidate, and putting it first keeps it from inflating the other
+categories.
+
+**Labels.** Each bar is annotated with its count and, in brackets, the share of
+the cells *still remaining* when that test was applied — which is what says
+whether a test did a little or a lot of work. The "kept" bar instead reports its
+share of the whole window. Bars that read zero are kept rather than hidden:
+"this was not the cause" is a real answer.
+
+---
+
+## 12. `fig13_mask_map.png` — Why each BIOMASS cell was kept or dropped
+
+**Shows** the same accounting in space: the analysis window drawn cell by cell,
+each coloured by the test that removed it (or by "kept"). This is where a bare
+count becomes diagnostic — an exclusion concentrated at the footprint edge means
+something different from one scattered through the interior.
+
+**How it is computed.** Exactly the codes behind figure 11, drawn on the BIOMASS
+grid with nearest-neighbour rendering, so one screen block is one cell. The
+legend carries each class's cell count and its share of the window.
+
+**Colour.** The four hues carrying real exclusion reasons — blue, orange, aqua,
+violet — were validated as an all-pairs set on this surface (worst CVD ΔE 9.2,
+worst normal-vision ΔE 16.3). "Kept" and "outside ALS footprint" take recessive
+neutrals rather than a fifth and sixth hue: they are the two states a reader is
+not asked to discriminate between, and holding the palette to four hues is what
+keeps the four that matter apart. Aqua sits below 3:1 against the surface, so
+the legend carries counts and the same figures appear in figure 11 and in
+`exclusion_counts.csv` — identity is never colour alone.
+
+---
+
+## 13. Pooled figures (`outputs/_combined/`)
 
 Written by `03_combine.py`, which concatenates every per-scene
 `paired_cells.csv` into one sample. Colour here encodes **identity** -- which
@@ -311,6 +367,7 @@ all sites together and the colours show how each site sits relative to them.
 | `fig05_bland_altman_combined.png` | as section 6, with points coloured by site; the bias line and the two 95 % limits of agreement are pooled. |
 | `fig07_als_statistic_combined.png` | as section 8, recomputed on the pooled sample. |
 | `fig08_quality_classes_combined.png` | as section 9, recomputed on the pooled sample. Quality values are pooled across scenes before binning. |
+| `fig11_exclusions_by_scene.png` | as section 11, one stacked bar per scene. Stacked to 100 % rather than to counts, because the analysis windows differ in size between sites and the question is what proportion of each scene is lost to what. Each bar is annotated with its absolute window size; the counts themselves are in `exclusion_counts_all.csv`. |
 
 Two figures exist only in the pooled set, since they compare scenes to each
 other rather than pooling them:
@@ -331,7 +388,7 @@ so the other three can be read with their sample sizes in view.
 
 ---
 
-## 12. Accompanying tables
+## 14. Accompanying tables
 
 Each figure has a machine-readable counterpart in the same folder.
 
@@ -345,6 +402,7 @@ Per scene, in `outputs/<site>/<scene>/`:
 | `metrics_by_height_bin.csv` | the height-stratified table behind figure 4 |
 | `metrics_by_quality_class.csv` | figure 9 |
 | `metrics_by_chm_product.csv` | the primary vs. secondary CHM cross-check |
+| `exclusion_counts.csv` | figures 11 and 12 -- one row of cell counts per exclusion reason |
 | `../../summary_all_products.csv` | one row per scene, every site together, including the co-registration verdict |
 
 Pooled, in `outputs/_combined/`:
@@ -358,5 +416,6 @@ Pooled, in `outputs/_combined/`:
 | `metrics_by_als_stat.csv` | pooled figure 7 |
 | `metrics_by_height_bin.csv` | pooled height-stratified table |
 | `metrics_by_quality_class.csv` | pooled figure 8 |
+| `exclusion_counts_all.csv` | figure 11 of the pooled set -- one row per scene, absolute counts |
 
 Metric definitions are in `bgt/metrics.py`.

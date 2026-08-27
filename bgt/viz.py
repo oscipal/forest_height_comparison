@@ -21,7 +21,8 @@ import matplotlib as mpl
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap, TwoSlopeNorm
+from matplotlib.patches import Patch
 
 import config
 from bgt.metrics import compute_metrics
@@ -451,4 +452,134 @@ def plot_quality_strata(table: pd.DataFrame, out_path: Path,
     ax2.set_title("Sample size per quality class")
     ax2.set_xlabel("quality layer value")
     _titleblock(fig, "Error and sample size by BIOMASS quality class", subtitle)
+    return _save(fig, out_path)
+
+
+# --------------------------------------------------------------------------- #
+# Where the cells go
+# --------------------------------------------------------------------------- #
+#
+# Colour here encodes identity -- which test removed a cell. The four hues
+# carrying the real exclusion reasons were validated as an all-pairs set
+# (blue / orange / aqua / violet: worst CVD dE 9.2, worst normal-vision dE
+# 16.3 on this surface). "Kept" and "outside footprint" deliberately take
+# recessive neutrals rather than a fifth and sixth hue: they are the states the
+# reader is not asked to discriminate between, and holding the palette to four
+# hues is what keeps the four that matter separable. Aqua sits below 3:1
+# against the surface, so the legend carries counts and the same numbers appear
+# in the funnel chart and the CSV -- identity is never colour alone.
+
+EXCLUSION_COLORS = {
+    # "kept" and "outside footprint" are both neutral, but they sit adjacent in
+    # the stacked scene chart and are its two largest segments, so they need
+    # real separation from each other -- hence a mid grey against a near-white
+    # rather than two similar tints.
+    "kept": "#bfbeb5",
+    "als_absent": "#f2f1ec",
+    "fh_nodata": "#2a78d6",
+    "fh_out_of_range": "#eb6834",
+    "fh_quality_rejected": "#1baf7a",
+    "als_coverage_low": "#4a3aa7",
+    "als_stat_missing": "#898781",
+}
+
+
+def plot_exclusions(
+    counts: dict[str, int],
+    labels: dict[str, str],
+    out_path: Path,
+    subtitle: str = "",
+    grid_name: str = "BIOMASS",
+) -> Path:
+    """Funnel of how the analysis window is reduced to the paired sample.
+
+    Each bar counts the cells removed by one test, applied in order, so the
+    bars plus the kept bar sum to the whole window. The right-hand axis states
+    what fraction of the cells still standing at that point each test removed,
+    which is the number that says whether a test is doing a little or a lot of
+    work.
+    """
+    keys = [k for k in labels if k in counts]
+    total = sum(counts.values())
+    if total == 0:
+        raise ValueError("empty exclusion counts")
+
+    # Share of the cells still remaining when each test is applied.
+    remaining, shares = total, []
+    for key in keys:
+        n = counts[key]
+        shares.append(100.0 * n / remaining if remaining else 0.0)
+        if key != "kept":
+            remaining -= n
+
+    pos = np.arange(len(keys))
+    values = [counts[k] for k in keys]
+    colors = [EXCLUSION_COLORS.get(k, INK_MUTED) for k in keys]
+
+    fig, ax = plt.subplots(figsize=(9.6, 0.62 * len(keys) + 2.4),
+                           constrained_layout=True)
+    ax.barh(pos, values, height=0.66, color=colors, linewidth=0.8,
+            edgecolor=SURFACE)
+    for p, v, share, key in zip(pos, values, shares, keys):
+        note = (f"{v:,}  ({share:.0f} % of those remaining)"
+                if key != "kept" else f"{v:,}  ({100.0 * v / total:.0f} % of window)")
+        ax.annotate(note, xy=(v, p), xytext=(6, 0), textcoords="offset points",
+                    va="center", fontsize=8, color=INK_SECONDARY)
+    ax.set_yticks(pos)
+    ax.set_yticklabels([labels[k] for k in keys])
+    ax.invert_yaxis()
+    ax.set_xlabel(f"{grid_name} cells   |   analysis window {total:,}")
+    ax.margins(x=0.26)
+    ax.grid(axis="y", visible=False)
+    # The note goes in the axes title rather than a floating box: the bars fill
+    # the plot area from the left, so no corner is reliably free.
+    ax.set_title("tests applied top to bottom; each sees only the cells that "
+                 "survived the tests above it",
+                 fontsize=8.5, fontweight="normal", color=INK_SECONDARY)
+    _titleblock(fig, f"Where the {grid_name} cells go", subtitle)
+    return _save(fig, out_path)
+
+
+def plot_mask_map(
+    reason: np.ndarray,
+    counts: dict[str, int],
+    labels: dict[str, str],
+    codes: dict[int, str],
+    extent: tuple[float, float, float, float],
+    out_path: Path,
+    subtitle: str = "",
+    grid_name: str = "BIOMASS",
+) -> Path:
+    """Map of the analysis window, each cell coloured by why it was excluded."""
+    present = [c for c in codes if (reason == c).any()]
+    key_of = {c: codes[c] for c in present}
+
+    # Remap the sparse codes onto 0..n-1 so the colour list indexes directly.
+    lookup = np.full(int(max(codes)) + 1, -1, dtype=np.int16)
+    for i, c in enumerate(present):
+        lookup[c] = i
+    indexed = lookup[reason]
+
+    colors = [EXCLUSION_COLORS.get(key_of[c], INK_MUTED) for c in present]
+    cmap = ListedColormap(colors)
+
+    fig, ax = plt.subplots(figsize=(8.2, 6.6), constrained_layout=True)
+    ax.imshow(indexed, extent=extent, origin="upper", cmap=cmap,
+              interpolation="nearest", vmin=-0.5, vmax=len(present) - 0.5)
+    ax.set_xlabel("longitude (deg)" if abs(extent[1] - extent[0]) < 5 else "easting (m)")
+    ax.set_ylabel("latitude (deg)" if abs(extent[1] - extent[0]) < 5 else "northing (m)")
+    ax.grid(False)
+    ax.tick_params(labelsize=7)
+
+    total = sum(counts.values())
+    handles = [
+        Patch(facecolor=EXCLUSION_COLORS.get(key_of[c], INK_MUTED),
+              edgecolor=AXIS, linewidth=0.6,
+              label=f"{labels[key_of[c]]}  --  {counts.get(key_of[c], 0):,} "
+                    f"({100.0 * counts.get(key_of[c], 0) / total:.0f} %)")
+        for c in present
+    ]
+    ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0),
+              borderaxespad=0.0, title="cell status", alignment="left")
+    _titleblock(fig, f"Why each {grid_name} cell was kept or dropped", subtitle)
     return _save(fig, out_path)

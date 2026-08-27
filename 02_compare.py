@@ -215,6 +215,14 @@ def compare_product(
         del eth_agg, eth_grid_fine, eth_stats
         gc.collect()
 
+    # Attribute every cell of the window to the first test it fails, so the
+    # losses can be reported rather than just implied by the surviving count.
+    reason_grid = coreg.exclusion_grid(
+        fh, stats["coverage"], stats[args.primary_stat], args.min_coverage
+    )
+    drop_counts = coreg.exclusion_counts(reason_grid)
+    df["reject_reason"] = reason_grid.ravel()
+
     keep = (
         np.isfinite(df["fh"])
         & (df["coverage"] >= args.min_coverage)
@@ -223,6 +231,20 @@ def compare_product(
     paired = df[keep].copy()
     print(f"  {len(paired)} paired cells at coverage >= {args.min_coverage:.0%} "
           f"(of {int(np.isfinite(df['fh']).sum())} valid BIOMASS cells)")
+
+    # The funnel must reconcile with the pairing mask, or the map is a fiction.
+    if drop_counts["kept"] != len(paired):
+        raise AssertionError(
+            f"exclusion accounting disagrees with the pairing mask: "
+            f"{drop_counts['kept']} vs {len(paired)}"
+        )
+    in_window = sum(drop_counts.values())
+    print("  cells: " + ", ".join(
+        f"{coreg.EXCLUSION_LABELS[c]} {drop_counts[coreg.EXCLUSION_KEYS[c]]:,}"
+        for c in coreg.EXCLUSION_ORDER
+        if drop_counts[coreg.EXCLUSION_KEYS[c]]
+    ) + f"  (window {in_window:,})")
+
     if len(paired) < 20:
         print("  too few paired cells for meaningful statistics -- skipped")
         return None
@@ -368,6 +390,15 @@ def compare_product(
                       als_label=args.primary_stat, subtitle=subtitle,
                       prod_name="ETH canopy height (aggregated)",
                       prod_short="ETH", grid_name="BIOMASS")
+
+    viz.plot_exclusions(drop_counts, coreg.EXCLUSION_LABELS_BY_KEY,
+                        out_dir / "fig12_exclusions.png", subtitle=subtitle)
+    viz.plot_mask_map(reason_grid, drop_counts, coreg.EXCLUSION_LABELS_BY_KEY,
+                      coreg.EXCLUSION_KEYS, extent,
+                      out_dir / "fig13_mask_map.png", subtitle=subtitle)
+    pd.DataFrame([{"site": site, "scene": item_id, "biomass_date": date,
+                   "cells_in_window": in_window, **drop_counts}]).to_csv(
+        out_dir / "exclusion_counts.csv", index=False)
 
     return {
         "site": site_label,
