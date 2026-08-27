@@ -39,17 +39,18 @@ scene before any plotting:
 1. The ALS CHM is read and masked (`mask_combined.tif`; pixels outside 0–100 m
    dropped).
 2. It is warped once, with area-average resampling, onto a grid that is an
-   exact integer refinement of the BIOMASS grid (~2 m cells). A second warp of a validity mask gives the
+   exact integer refinement of the BIOMASS grid (1 m cells, matching the native
+   ALS resolution). A second warp of a validity mask gives the
    valid-ALS **coverage fraction** of every fine cell.
-3. Each BIOMASS cell is reduced from its own 47×47 block of fine cells. The
+3. Each BIOMASS cell is reduced from its own 93×93 block of fine cells. The
    mean is coverage-weighted; percentiles and the maximum are taken over the
    fine values directly.
 4. A cell is kept only where BIOMASS reports a valid height, the BIOMASS
    quality value passes the filter (`--quality-max`, default 2.0), and at
    least 90 % of the cell area carries valid ALS.
 
-The refinement factor follows the site: at ~93 m BIOMASS cells and a ~2 m
-target it is 47, so each BIOMASS cell is reduced from 47 x 47 = 2209 fine
+The refinement factor follows the site: at ~93 m BIOMASS cells and a 1 m
+target it is 93, so each BIOMASS cell is reduced from 93 x 93 = 8649 fine
 cells.
 
 The BIOMASS raster is never resampled — the ALS is always brought up to it.

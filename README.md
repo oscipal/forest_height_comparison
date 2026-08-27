@@ -183,14 +183,14 @@ A working grid is constructed as an **exact integer refinement** of the BIOMASS
 window:
 
 ```
-refine = ceil(min(cell_x, cell_y) / FINE_CELL_M)        # 93 m / 2 m -> 47
+refine = ceil(min(cell_x, cell_y) / FINE_CELL_M)        # 93 m / 1 m -> 93
 fine_transform = fh_transform * translate(-pad, -pad) * scale(1 / refine)
 ```
 
 with `pad = ceil(SHIFT_SEARCH_M / cell) + 1` BIOMASS cells of margin on each
 side, so that a shifted sampling window can never run off the grid. Because
 `refine` is an integer, every BIOMASS cell corresponds to exactly `refine ×
-refine` fine cells — 47 × 47 = 2209 at these sites — with no cell straddling a
+refine` fine cells — 93 × 93 = 8649 at these sites — with no cell straddling a
 boundary.
 
 Cell sizes are computed in metres even though the BIOMASS products are in
@@ -214,12 +214,21 @@ coverage 0.
 This is the only interpolation anywhere in the comparison. Everything above it
 is exact arithmetic.
 
-**What the 2 m intermediate costs.** Because percentiles are later taken over
-these ~2 m block means rather than raw 1 m pixels, the ALS reference is very
-slightly smoothed. Measured on Loundoungou, moving to a 1 m fine grid
-(`--fine-cell 1.0`, refinement 93) raises ALS p90 by **+0.14 m** and moves RMSE
-by +0.04 m — about 4 % of the RMSE, at four times the memory. The 2 m default
-therefore stands, and the flag is there when an exact figure is wanted.
+**The fine cell is 1 m, matching the native ALS resolution.** The intermediate
+grid neither coarsens nor upsamples the ALS: each fine cell takes essentially
+one source pixel, so the per-cell percentiles in step 3 are computed over the
+canopy surface as measured rather than over pre-averaged blocks.
+
+This was not always the default. A 2 m fine cell was used first, and it biases
+the ALS reference low — measured at Loundoungou, moving from 2 m to 1 m raises
+ALS p90 by **+0.14 m**, moves bias by −0.14 m and RMSE by +0.04 m, because
+averaging to 2 m clips the extremes a high percentile is meant to capture. Small
+against an RMSE of ~4 m, but a real smoothing, and there is no reason to accept
+it when the native data is 1 m.
+
+The cost is memory: the fine grid scales with the inverse square of the cell
+size, so 1 m needs about four times what 2 m did — a peak of ~2.5 GB on the
+largest site here. Raise `--fine-cell` if a run does not fit.
 
 ### Step 3 — Block reduction into BIOMASS cells (no interpolation)
 

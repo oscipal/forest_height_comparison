@@ -23,6 +23,7 @@ Examples
 from __future__ import annotations
 
 import argparse
+import gc
 import re
 import sys
 from datetime import datetime
@@ -109,7 +110,7 @@ def compare_product(
         quality_path=product["quality"],
         footprint_bounds=footprint,
         footprint_crs=chm.crs,
-        pad_m=args.shift_search + 2 * config.FINE_CELL_M,
+        pad_m=args.shift_search + 2 * args.fine_cell,
         quality_max=args.quality_max,
     )
     if fh is None:
@@ -148,6 +149,12 @@ def compare_product(
             shift, offset = None, (0, 0)
 
     stats = aggregator.full_stats(*offset, config.ALS_STATS)
+    # The per-cell statistics are all that is needed from here on; the fine grid
+    # and its summed-area tables are the largest objects in the run, so let them
+    # go before the next product builds its own.
+    aggregator.release()
+    del aggregator, grid
+    gc.collect()
 
     # ------------------------------------------------------------------ #
     # Per-cell table
@@ -180,6 +187,8 @@ def compare_product(
         agg2 = coreg.BlockAggregator(grid2, fh.shape)
         stats2 = agg2.full_stats(*offset, [args.primary_stat])
         df[f"als2_{args.primary_stat}"] = stats2[args.primary_stat].ravel()
+        del agg2, grid2, stats2
+        gc.collect()
 
     # ------------------------------------------------------------------ #
     # ETH global canopy height, aggregated onto the same BIOMASS cells
@@ -193,7 +202,7 @@ def compare_product(
     if not args.no_eth:
         eth = eth_mod.load_eth(
             site, footprint_bounds=footprint, footprint_crs=chm.crs,
-            pad_m=args.shift_search + 2 * config.FINE_CELL_M, eth_dir=args.eth_dir,
+            pad_m=args.shift_search + 2 * args.fine_cell, eth_dir=args.eth_dir,
         )
     if eth is not None:
         eth_grid_fine = coreg.build_fine_grid(eth, fh, args.fine_cell,
@@ -203,6 +212,8 @@ def compare_product(
         df["eth_coverage"] = eth_stats["coverage"].ravel()
         for stat in config.ALS_STATS:
             df[f"eth_{stat}"] = eth_stats[stat].ravel()
+        del eth_agg, eth_grid_fine, eth_stats
+        gc.collect()
 
     keep = (
         np.isfinite(df["fh"])

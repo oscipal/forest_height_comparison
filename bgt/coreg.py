@@ -292,10 +292,13 @@ class BlockAggregator:
         self.fh_shape = fh_shape
         n, pad = grid.refine, grid.pad
 
-        weights = np.nan_to_num(grid.coverage, nan=0.0)
-        weighted = np.nan_to_num(grid.values, nan=0.0) * weights
-        self._int_w = _integral(weights)
-        self._int_vw = _integral(weighted)
+        # The summed-area tables are what make the shift search affordable, but
+        # they are float64 and the size of the fine grid -- at a 1 m fine cell
+        # that is hundreds of megabytes each. An aggregator that is only ever
+        # asked for one offset (the secondary CHM, ETH) never needs them, so
+        # they are built on first use rather than in the constructor.
+        self._int_w: np.ndarray | None = None
+        self._int_vw: np.ndarray | None = None
 
         h, w = fh_shape
         self._base_y = pad * n + n * np.arange(h)
@@ -303,17 +306,65 @@ class BlockAggregator:
         self._n = n
         self.max_offset = pad * n  # keeps every shifted window inside the grid
 
+    def _integrals(self) -> tuple[np.ndarray, np.ndarray]:
+        if self._int_w is None:
+            weights = np.nan_to_num(self.grid.coverage, nan=0.0)
+            weighted = np.nan_to_num(self.grid.values, nan=0.0) * weights
+            self._int_w = _integral(weights)
+            self._int_vw = _integral(weighted)
+        return self._int_w, self._int_vw  # type: ignore[return-value]
+
+    def release(self) -> None:
+        """Drop the cached summed-area tables once the shift search is done."""
+        self._int_w = None
+        self._int_vw = None
+
     def mean_and_coverage(self, oy: int, ox: int) -> tuple[np.ndarray, np.ndarray]:
-        """Coverage-weighted mean height and area coverage per BIOMASS cell."""
+        """Coverage-weighted mean height and area coverage per BIOMASS cell.
+
+        Uses the summed-area tables, which pay for themselves across the
+        thousands of offsets the shift search evaluates.
+        """
         if abs(oy) > self.max_offset or abs(ox) > self.max_offset:
             raise ValueError(f"offset ({oy}, {ox}) exceeds the padded fine grid")
+        int_w, int_vw = self._integrals()
         sy, sx = self._base_y + oy, self._base_x + ox
-        w_sum = _block_sums(self._int_w, sy, sx, self._n)
-        vw_sum = _block_sums(self._int_vw, sy, sx, self._n)
+        w_sum = _block_sums(int_w, sy, sx, self._n)
+        vw_sum = _block_sums(int_vw, sy, sx, self._n)
         with np.errstate(invalid="ignore", divide="ignore"):
             mean = np.where(w_sum > 0, vw_sum / w_sum, np.nan)
         coverage = w_sum / (self._n * self._n)
         return mean, coverage
+
+    def _mean_and_coverage_direct(
+        self, oy: int, ox: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """The same quantities for a single offset, without a summed-area table.
+
+        Reduces the blocks directly. Slower per call, but it avoids allocating
+        two float64 copies of the fine grid for an aggregator that will only
+        ever be asked about one offset.
+
+        It is also the more accurate of the two: summing within a block in
+        float64 is exact, whereas the summed-area tables accumulate in float32
+        across the whole grid and then difference large numbers, which costs
+        about 1e-4 m on these grids. That is irrelevant to the shift search,
+        which only ranks correlations, but the statistics that get reported come
+        through here, so they take the exact route.
+        """
+        n, (h, w) = self._n, self.fh_shape
+        sy, sx = self._base_y[0] + oy, self._base_x[0] + ox
+        weights = np.nan_to_num(
+            self.grid.coverage[sy : sy + h * n, sx : sx + w * n], nan=0.0
+        ).astype(np.float64)
+        values = np.nan_to_num(
+            self.grid.values[sy : sy + h * n, sx : sx + w * n], nan=0.0
+        ).astype(np.float64)
+        w_sum = weights.reshape(h, n, w, n).sum(axis=(1, 3))
+        vw_sum = (values * weights).reshape(h, n, w, n).sum(axis=(1, 3))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean = np.where(w_sum > 0, vw_sum / w_sum, np.nan)
+        return mean, w_sum / (n * n)
 
     def full_stats(self, oy: int, ox: int, stats: list[str]) -> dict[str, np.ndarray]:
         """All requested per-cell statistics at one offset.
@@ -327,7 +378,12 @@ class BlockAggregator:
         block = self.grid.values[sy : sy + h * n, sx : sx + w * n]
         block = block.reshape(h, n, w, n).transpose(0, 2, 1, 3).reshape(h, w, n * n)
 
-        mean, coverage = self.mean_and_coverage(oy, ox)
+        # A single offset: reduce directly rather than paying for the tables.
+        mean, coverage = (
+            self.mean_and_coverage(oy, ox)
+            if self._int_w is not None
+            else self._mean_and_coverage_direct(oy, ox)
+        )
         out: dict[str, np.ndarray] = {"coverage": coverage}
         finite = np.isfinite(block)
         out["n_fine"] = finite.sum(axis=2).astype(np.int32)

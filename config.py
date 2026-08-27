@@ -185,9 +185,19 @@ ETH_HEIGHT_MAX = 254.0
 #: The BIOMASS grid is the target grid: the coarse product is never resampled.
 #: The ALS CHM is first warped onto a grid that is an exact integer refinement
 #: of the BIOMASS grid, then block-reduced. This is the target edge length of a
-#: fine cell, in metres. ~2 m keeps the refinement factor modest while staying
-#: close to the 1 m native ALS resolution.
-FINE_CELL_M = 2.0
+#: fine cell, in metres.
+#:
+#: 1 m keeps the ALS at its native resolution through the intermediate step, so
+#: the per-cell percentiles are taken over the canopy surface as measured rather
+#: than over pre-averaged blocks. At a ~93 m BIOMASS cell the refinement factor
+#: is 93 and each cell is reduced from 93 x 93 = 8649 fine cells.
+#:
+#: The cost is memory: the fine grid scales with the inverse square of this
+#: value, so 1 m needs about four times what 2 m did. Raise it if a run does not
+#: fit; 2 m biases the ALS reference low by roughly 0.15 m (measured at
+#: Loundoungou), which is small against an RMSE of several metres but is a real
+#: smoothing of the extremes.
+FINE_CELL_M = 1.0
 
 #: Maximum planimetric shift tested during co-registration, in metres.
 SHIFT_SEARCH_M = 100.0
