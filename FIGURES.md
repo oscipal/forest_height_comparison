@@ -6,8 +6,8 @@ results mean.
 
 Per-scene figures are written to `outputs/<site>/<scene>/` by `02_compare.py`
 (via `bgt/viz.py`); pooled figures to `outputs/_combined/` by `03_combine.py`
-(via `bgt/viz_combined.py`). Sections 2-9 cover the per-scene figures, section
-10 the pooled ones.
+(via `bgt/viz_combined.py`). Sections 2-10 cover the per-scene figures, section
+11 the pooled ones.
 
 ---
 
@@ -255,7 +255,40 @@ label the axis. Classes with fewer than 3 cells are dropped.
 
 ---
 
-## 10. Pooled figures (`outputs/_combined/`)
+## 10. The ETH comparison figures
+
+Written only when a clipped ETH raster is available for the site (skipped under
+`--no-eth`). The ETH global canopy height product (Lang et al. 2023) is a 10 m
+canopy top height regressed from Sentinel-2 against GEDI, representative of
+**2020**, delivered on a geographic grid as `uint8` whole metres with 255 as
+no-data.
+
+**The three-way cell set.** These figures use a stricter subset than the rest of
+the run: the paired cells that *additionally* carry a finite ETH aggregate with
+at least `--min-coverage` ETH coverage. So all three sources have data in every
+cell plotted, and neither product is credited for covering ground the other one
+misses. The cell count is therefore slightly below the paired count used
+elsewhere.
+
+**ETH is aggregated at the nominal geolocation**, never at the offset found for
+the ALS — that offset describes where the ALS sits relative to BIOMASS and says
+nothing about where a Sentinel-2 derived product sits. Otherwise it goes through
+exactly the same machinery as the ALS: warped onto the same 1 m fine grid, then
+block-reduced to the same BIOMASS cells, with the same per-cell statistics.
+
+| File | Shows |
+|---|---|
+| `fig09_biomass_vs_eth.png` | the two spaceborne products against each other — x is the ETH aggregate, y BIOMASS FH. Same construction as section 3: hexbin density, 1:1, OLS and RMA, and a metrics box. Neither is a reference here, so read it as agreement between two estimates rather than as validation. |
+| `fig10_eth_vs_als.png` | ETH against the ALS reference — x is the ALS aggregate, y the ETH aggregate. Directly comparable with `fig02_scatter.png`, which is the same plot for BIOMASS, so the two can be read side by side. |
+| `fig11_eth_maps.png` | the ALS reference, ETH, and their difference, drawn on the **BIOMASS** grid so it lines up cell for cell with `fig01_maps.png`. Same scaling rules as section 2. |
+
+Two artefacts to expect. ETH's whole-metre quantisation puts a floor of about
+0.29 m on any RMSE against it and shows as horizontal banding in the scatters.
+And the 2020 epoch means the ETH-to-ALS gap is larger than the BIOMASS-to-ALS
+gap at every site — four years at Mbalmayo, five at Loundoungou and Luki.
+
+---
+## 11. Pooled figures (`outputs/_combined/`)
 
 Written by `03_combine.py`, which concatenates every per-scene
 `paired_cells.csv` into one sample. Colour here encodes **identity** -- which
@@ -298,7 +331,7 @@ so the other three can be read with their sample sizes in view.
 
 ---
 
-## 11. Accompanying tables
+## 12. Accompanying tables
 
 Each figure has a machine-readable counterpart in the same folder.
 
