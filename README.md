@@ -1,6 +1,6 @@
 # ALS canopy height vs. spaceborne forest height products
 
-Airborne laser scanning (ALS) from three central African forest sites, used as
+Airborne laser scanning (ALS) from four central African forest sites, used as
 the reference for two spaceborne canopy height products: the **ESA BIOMASS
 Level-2a forest height** product and the **ETH global 10 m canopy height** map
 (Lang et al. 2023). The pipeline downloads both products, co-registers them with
@@ -16,6 +16,7 @@ conda create -n biomass_gt python=3.11
 conda activate biomass_gt
 pip install -r requirements.txt
 
+python 00_normalize_als.py --site Amacayacu        # only for non-GCA layouts
 python 01_download_biomass.py --list-only          # search, no token needed
 python 01_download_biomass.py --token <offline-token>
 python 01b_download_eth.py                         # ETH 10 m product, no token
@@ -33,7 +34,6 @@ Per-scene results land in `outputs/<site>/<scene>/`, pooled results in
 `outputs/_combined/`, and the ETH-on-its-own-grid comparison in
 `outputs_eth/<site>/`.
 
-Sites are **discovered, not configured**: every `03_processed_<site>` folder in
 **Every output is named after the quality filter that produced it** — `_q2` for
 the default cut, `_q20`, `_allquality` for no cut — so the three complete sets
 checked in here sit side by side in the same folders and no run can overwrite
@@ -43,6 +43,7 @@ another's figures. `02_compare.py` derives the suffix from its own
 comes from](#where-the-20-quality-threshold-comes-from) for why the filtered set
 is the headline one.
 
+Sites are **discovered, not configured**: every `03_processed_<site>` folder in
 the repository is picked up automatically, so adding a fourth site means
 dropping in its folder and re-running. `--site <name>` restricts any step.
 
@@ -54,7 +55,10 @@ included**, for different reasons.
 **ALS products — not redistributable.** Access is closed (see References), so
 `03_processed_*/` is gitignored. To reproduce, place one folder per site at the
 repository root named `03_processed_<site>`; sites are discovered from that
-pattern, so the name is the only registration step. Each folder needs:
+pattern, so the name is the only registration step. A site flown more than once
+may instead hold one subfolder per acquisition (Ipassa), and each subfolder is
+then discovered as its own site, labelled `<site>_<acquisition>`. Each folder
+needs:
 
 | File | Used for | Required |
 |---|---|---|
@@ -64,6 +68,16 @@ pattern, so the name is the only registration step. Each folder needs:
 | `summary_processing.csv` | site name and acquisition dates, stamped on every figure | yes |
 | `chm_tin.tif` | the `--chm-secondary` sensitivity check | drop it with `--chm-secondary none` |
 | `mask_pd04.tif`, `mask_steep.tif` | `--strict-mask` only | no |
+
+**A folder that is not GCA-shaped** can be brought into line by
+`00_normalize_als.py`, which writes the missing standard files beside the
+originals without touching them. Amacayacu needs it: its products carry
+site-suffixed names, its masks arrive stacked as bands of one raster with the
+opposite polarity (1 marks a *flagged* pixel, where GCA marks an invalid one
+with no-data), and it ships no outline. The step copies the CHM to its standard
+name, splits and inverts the mask bands, and traces the outline from the CHM's
+valid footprint. A missing `summary_processing.csv` is not fatal — the figures
+then stamp "date unknown".
 
 **BIOMASS products — freely available but bulky**, so `data/` is gitignored.
 Step 1 downloads them; re-running it is the intended way to obtain them.
@@ -79,20 +93,37 @@ grid has a hundred times the cells of a 93 m one.
 
 ## The sites
 
-| | Loundoungou | Luki2025 | Mbalmayo |
-|---|---|---|---|
-| Country | Rep. of the Congo | DR Congo | Cameroon |
-| Centre | 17.06 °E, 2.37 °N | 13.10 °E, 5.62 °S | 11.45 °E, 3.43 °N |
-| CRS | EPSG:32633 | EPSG:32733 | EPSG:32632 |
-| Extent | 17.5 km² | 4.1 km² | 17.1 km² |
-| ALS acquisition | 19–24 Mar 2025 | 18–22 Oct 2025 | 8–13 Feb 2024 |
-| Pulse density | 351 m⁻² | 923 m⁻² | 389 m⁻² |
-| Mean CHM | 30.1 m | 23.7 m | 19.6 m |
-| 99th pct CHM | 46.6 m | 52.7 m | 42.5 m |
+| | Loundoungou | Luki2025 | Mbalmayo | Ipassa |
+|---|---|---|---|---|
+| Country | Rep. of the Congo | DR Congo | Cameroon | Gabon |
+| Centre | 17.06 °E, 2.37 °N | 13.10 °E, 5.62 °S | 11.45 °E, 3.43 °N | 12.79 °E, 0.50 °N |
+| CRS | EPSG:32633 | EPSG:32733 | EPSG:32632 | EPSG:32633 |
+| Extent | 17.5 km² | 4.1 km² | 17.1 km² | 34.5 km² |
+| ALS acquisition | 19–24 Mar 2025 | 18–22 Oct 2025 | 8–13 Feb 2024 | 15–23 Jul 2025 |
+| Pulse density | 351 m⁻² | 923 m⁻² | 389 m⁻² | 294 m⁻² |
+| Mean CHM | 30.1 m | 23.7 m | 19.6 m | 22.5 m |
+| 99th pct CHM | 46.6 m | 52.7 m | 42.5 m | 42.8 m |
 
-All three were processed with the Global Canopy Atlas ALS pipeline v1.1.0
+All four were processed with the Global Canopy Atlas ALS pipeline v1.1.0
 (Fischer et al. 2024), so the products and masks mean the same thing at every
 site.
+
+**Ipassa was flown twice**, and ships one folder per acquisition rather than
+products at its top level: `LAS_Cross` (the column above — 34.5 km², 294 m⁻²,
+5422 raw tiles) and `LAS_Simple` (7.0 km², 161 m⁻², flown 21–23 July). Each is
+discovered as a site in its own right, `Ipassa_LAS_Cross` and
+`Ipassa_LAS_Simple`, because each has its own outline, dates and pulse density.
+The names are the raw-data folders' own and are documented nowhere in the
+delivery; the density and scan-angle statistics are consistent with crossed
+versus single-direction flight lines, but that is an inference. **`LAS_Simple`
+lies 98 % inside `LAS_Cross`**, so the two are not independent samples of
+different forest: only `LAS_Cross` enters the pooled results, and `LAS_Simple`
+is reported per scene as a check on what halving the pulse density costs.
+
+A fifth site, **Amacayacu** (Colombia, 18.3 km², 70.27 °W, 3.80 °S), is present
+but has no BIOMASS coverage: no `FP_FH__L2A` scene reaches its footprint, so it
+appears only in the ETH comparison on the 10 m grid. It also arrives in a
+different layout — see [Data](#data).
 
 ## The ALS reference: which product, and why
 
@@ -120,8 +151,8 @@ quantities.
 
 ## The BIOMASS scenes
 
-Seven `FP_FH__L2A` scenes cover the three footprints; six yield a usable
-comparison.
+Eleven `FP_FH__L2A` scenes cover the four footprints of the headline set; eight
+yield a usable comparison.
 
 | Site | Scene sensing window | Gap after ALS | Paired cells |
 |---|---|---|---|
@@ -132,10 +163,18 @@ comparison.
 | Luki2025 | 14–26 Jan 2026 | ~3 months | 342 |
 | Mbalmayo | 24 Nov – 6 Dec 2025 | ~21 months | 789 |
 | Mbalmayo | 15–27 Dec 2025 | ~22 months | 482 |
+| Ipassa (Cross) | 13–25 Feb 2026, frame 154 | ~7 months | *no valid data over the footprint* |
+| Ipassa (Cross) | 13–25 Feb 2026, frame 155 | ~7 months | *no valid data over the footprint* |
+| Ipassa (Cross) | 6–18 Mar 2026, frame 154 | ~8 months | 3280 |
+| Ipassa (Cross) | 6–18 Mar 2026, frame 155 | ~8 months | 2631 |
 
-The skipped Luki scene overlaps the footprint by bounding box, but its usable
-swath lies elsewhere — every FH pixel over the site is no-data. The script
-detects this and moves on.
+The four skipped scenes overlap the footprint by bounding box, but their usable
+swath lies elsewhere — every FH pixel over the site is no-data, or the raster
+window misses the footprint entirely. The script detects both and moves on.
+
+The same four scenes were also compared against `Ipassa_LAS_Simple`, which sits
+inside the same footprint; those results are in
+`outputs/Ipassa_LAS_Simple/` and are kept out of the pooled sample.
 
 ## The ETH global canopy height map
 
@@ -328,60 +367,78 @@ reproducible from a fresh clone.
 
 ## Results
 
-**No shift was applied to any of the six scenes**, so all results are at the
-nominal geolocation. Five scenes returned an optimum that failed one of the
-checks above; on the sixth (Mbalmayo 2025-12-15) the eroded search set was empty,
-so the search never ran and that scene has no `fig06_shift_search.png`. The
+**No shift was applied to any of the eight scenes**, so all results are at the
+nominal geolocation. Seven scenes returned an optimum that failed one of the
+checks above; on the eighth (Mbalmayo 2025-12-15) the eroded search set was
+empty, so the search never ran and that scene has no
+`fig06_shift_search_q2.png`. The
 reason per scene is in the `shift_verdict` column of
 `outputs/summary_all_products_q2.csv`.
 
 ### Pooled over all sites and scenes
 
-ALS p90 per cell, quality-filtered, n = 4927 cells:
+ALS p90 per cell, quality-filtered, n = 10 838 cells over four sites and eight
+scenes:
 
 | | |
 |---|---|
-| ALS reference | 37.12 ± 6.20 m |
-| BIOMASS FH | 32.58 ± 7.19 m |
-| **bias** | **−4.54 m** (−12.2 %) |
-| MAE | 5.68 m |
-| **RMSE** | **7.69 m** (20.7 %) |
-| centred RMSE | 6.20 m |
-| Pearson r | 0.580 |
-| Spearman ρ | 0.546 |
-| CCC | 0.466 |
-| OLS / RMA slope | 0.67 / 1.16 |
-| 95 % limits of agreement | [−16.70, +7.61] m |
+| ALS reference | 34.43 ± 6.15 m |
+| BIOMASS FH | 31.61 ± 5.69 m |
+| **bias** | **−2.82 m** (−8.2 %) |
+| MAE | 5.07 m |
+| **RMSE** | **6.71 m** (19.5 %) |
+| centred RMSE | 6.08 m |
+| Pearson r | 0.474 |
+| Spearman ρ | 0.539 |
+| CCC | 0.424 |
+| OLS / RMA slope | 0.44 / 0.93 |
+| 95 % limits of agreement | [−14.75, +9.10] m |
 
 ### Per site
 
 | Site | scenes | n | ALS | BIOMASS | bias | RMSE | r |
 |---|---|---|---|---|---|---|---|
+| Ipassa (Cross) | 2 | 5911 | 32.19 ± 5.12 m | 30.80 ± 3.84 m | −1.39 m | 5.76 m (17.9 %) | 0.25 |
 | Loundoungou | 2 | 3001 | 39.41 ± 3.16 m | 37.03 ± 2.69 m | −2.37 m | 4.32 m (11.0 %) | 0.25 |
 | Luki2025 | 2 | 655 | 38.88 ± 8.50 m | 29.17 ± 7.31 m | −9.71 m | 13.67 m (35.2 %) | 0.26 |
 | Mbalmayo | 2 | 1271 | 30.83 ± 5.88 m | 23.81 ± 5.14 m | −7.01 m | 9.43 m (30.6 %) | 0.35 |
 
 Three things are worth reading carefully:
 
-**Pooling raises the correlation far above any single site** — r = 0.58 pooled
+**Pooling raises the correlation above any single site** — r = 0.47 pooled
 against 0.25–0.35 within sites. This is the height-range effect, not better
 performance: pooled ALS p90 has an SD of 6.2 m against ~3.2 m at Loundoungou.
 Within one uniform site there is barely any height signal for BIOMASS to track.
 The pooled r is the fairer measure of how the product behaves across a real
-landscape gradient; the within-site r is close to meaningless.
+landscape gradient; the within-site r is close to meaningless. Note that the
+pooled r *fell* when Ipassa was added (0.58 over three sites, 0.47 over four),
+which makes the point from the other direction: Ipassa sits in the middle of the
+height range and is well retrieved, so it adds cells without adding between-site
+spread for the correlation to feed on.
 
 **BIOMASS underestimates at every site and in every scene**, from −1.4 m to
-−13.8 m, and the pooled RMA slope of 1.16 against an OLS slope of 0.67 indicates
-the product compresses the height range. The residual-vs-height figure shows the
-same thing directly and consistently across all three sites: BIOMASS reads high
-over short canopy and increasingly low over tall canopy.
+−13.8 m. The residual-vs-height figure shows the compression directly and
+consistently across all four sites: BIOMASS reads high over short canopy and
+increasingly low over tall canopy. The pooled slopes no longer say so on their
+own — RMA fell from 1.16 over three sites to 0.93 over four — because Ipassa
+contributes more than half the cells at a narrow BIOMASS spread (SD 3.8 m
+against an ALS 5.1 m), which pulls the pooled RMA slope down. Read the figure
+and the per-site slopes rather than the pooled pair.
 
 **Scene-to-scene spread within a site is large** — Luki's two usable scenes
 differ by 7.8 m in bias (−13.8 vs −6.0 m) despite being one month apart over
 identical forest. Whatever drives that is a property of the retrieval, not of
-the canopy.
+the canopy. Ipassa is the counter-example: its two scenes, one frame apart on
+the same day, agree to 0.01 m in bias.
 
-The three sites also differ in ALS-to-BIOMASS time gap (2, 14 and 21 months),
+**Ipassa has the smallest bias of any site** — −1.4 m, against −2.4 to −9.7 m
+elsewhere — on 5911 cells, more than the other three sites together. Its RMSE of
+5.8 m is second to Loundoungou's 4.3 m, over a canopy with 1.6 times the height
+spread. With four sites the ALS-to-BIOMASS gap tracks agreement even less well
+than before: Ipassa's gap is the second shortest at ~8 months, Luki's is the
+shortest at ~2 months, and they are the best and worst sites respectively.
+
+The four sites also differ in ALS-to-BIOMASS time gap (2, 8, 14 and 21 months),
 which is confounded with site throughout — see the caveats.
 
 ### Which ALS statistic?
@@ -393,74 +450,17 @@ evidence. On the pooled sample:
 
 | ALS statistic | bias | MAE | RMSE | r |
 |---|---|---|---|---|
-| **p90** | **−4.54 m** | **5.68 m** | **7.69 m** | 0.58 |
-| p95 | −6.78 m | 7.27 m | 9.28 m | 0.54 |
-| p50 | +6.08 m | 7.30 m | 9.25 m | 0.59 |
-| mean | +7.17 m | 8.03 m | 9.54 m | 0.59 |
-| p99 | −10.05 m | 10.18 m | 12.06 m | 0.48 |
-| max | −12.77 m | 12.82 m | 14.54 m | 0.43 |
+| **p90** | **−2.82 m** | **5.07 m** | **6.71 m** | 0.47 |
+| p95 | −5.29 m | 6.40 m | 8.10 m | 0.43 |
+| p50 | +7.75 m | 8.40 m | 10.15 m | 0.52 |
+| mean | +8.25 m | 8.72 m | 10.15 m | 0.50 |
+| p99 | −8.93 m | 9.25 m | 10.93 m | 0.37 |
+| max | −11.82 m | 11.91 m | 13.43 m | 0.34 |
 
 p90 minimises both RMSE and |bias| and is the default (`--primary-stat`). Note
 that the correlation is nearly flat across candidates — the choice moves the
 *level*, not the strength of the relationship.
 
-### Why the maps have gaps
-
-`fig01_maps.png` draws only the cells that survived step 5, so every white pixel
-is a cell that failed one of its three conditions. Which condition dominates
-differs sharply between the sites:
-
-| Scene | cells in window | outside ALS footprint | FH no-data | quality > 2.0 | ALS coverage < 90 % | kept |
-|---|---|---|---|---|---|---|
-| Loundoungou 2026-05-19 | 4556 | 2402 | 0 | 0 | 209 | 1945 |
-| Loundoungou 2026-06-09 | 4556 | 2402 | 933 | 74 | 91 | 1056 |
-| Luki 2025-12-15 | 1020 | 481 | 0 | 154 | 72 | 313 |
-| Luki 2026-01-14 | 1020 | 484 | 0 | 80 | 114 | 342 |
-| Mbalmayo 2025-11-24 | 2250 | 162 | 0 | 1106 | 193 | 789 |
-| Mbalmayo 2025-12-15 | 2250 | 155 | 250 | 1256 | 107 | 482 |
-
-The tests are applied in the order of the columns and each cell is attributed to
-the **first** test it fails, so every row sums to the analysis window. Two
-further causes — an FH value outside 0–100 m, and no usable ALS aggregate
-despite sufficient coverage — are zero in every scene and are omitted here. The
-counts are `exclusion_counts_q2.csv` per scene and
-`outputs/_combined/exclusion_counts_all_q2.csv` pooled, drawn as
-`fig12_exclusions_q2.png` and, cell by cell in space, `fig13_mask_map_q2.png`.
-
-The first column of rejections is geometry, not data loss: the analysis window
-is the rectangle around the footprint, and the flight polygon inside it rarely
-fills it.
-
-**The quality filter is the dominant term at Mbalmayo and Luki.** The quality
-layer behaves like a different variable at each site. Over the Loundoungou
-2026-05-19 scene its 95th percentile is 1.11 — the whole footprint sits below the
-2.0 threshold and nothing at all is cut, which is why that map is solid. Over
-Mbalmayo the *median* is 3.5 and 9.6 in the two scenes, and the filter removes
-53 % and 68 % of the cells that reach it: more than half the footprint falls in
-the failed-retrieval tail.
-
-The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene,
-splitting the cells that pass every *other* test by their quality value:
-
-| | n | ALS p90 | BIOMASS FH | bias |
-|---|---|---|---|---|
-| quality ≤ 2 (kept) | 789 | 30.8 m | 25.0 m | −5.8 m |
-| quality > 2 (rejected) | 939 | 30.6 m | 12.0 m | **−18.5 m** |
-
-The ALS canopy is the same height in both groups; BIOMASS reports ~12 m where it
-reports ~25 m next door. The 2025-12-15 scene splits the same way: 1059 rejected
-cells under 30.4 m of ALS canopy, for which BIOMASS reports 9.0 m. These are
-retrieval failures, not short canopy — the same bimodality the threshold was
-derived from. (The 939 and 1059 here are smaller than the quality column of the
-table above, which is a funnel: it also carries the rejected cells that would
-have failed the coverage test as well.)
-
-**Loosening the threshold only makes agreement worse.** Re-running Luki and
-Mbalmayo at a range of thresholds adds cells monotonically and degrades every
-metric monotonically with them:
-
-| Scene | | q ≤ 2 | q ≤ 5 | q ≤ 20 | no filter |
-|---|---|---|---|---|---|
 ### Where the 2.0 quality threshold comes from
 
 Every `FP_FH__L2A` scene ships a per-cell quality layer alongside the height
@@ -514,6 +514,65 @@ a stricter cut would look better still. Quote it whenever you quote the RMSE.
 metrics per quality class in every run, so the choice stays checkable, and
 `--quality-max none` disables the filter entirely.
 
+### Why the maps have gaps
+
+`fig01_maps_q2.png` draws only the cells that survived step 5, so every white pixel
+is a cell that failed one of its three conditions. Which condition dominates
+differs sharply between the sites:
+
+| Scene | cells in window | outside ALS footprint | FH no-data | quality > 2.0 | ALS coverage < 90 % | kept |
+|---|---|---|---|---|---|---|
+| Loundoungou 2026-05-19 | 4556 | 2402 | 0 | 0 | 209 | 1945 |
+| Loundoungou 2026-06-09 | 4556 | 2402 | 933 | 74 | 91 | 1056 |
+| Luki 2025-12-15 | 1020 | 481 | 0 | 154 | 72 | 313 |
+| Luki 2026-01-14 | 1020 | 484 | 0 | 80 | 114 | 342 |
+| Mbalmayo 2025-11-24 | 2250 | 162 | 0 | 1106 | 193 | 789 |
+| Mbalmayo 2025-12-15 | 2250 | 155 | 250 | 1256 | 107 | 482 |
+| Ipassa 2026-03-06 f154 | 4717 | 640 | 0 | 240 | 557 | 3280 |
+| Ipassa 2026-03-06 f155 | 4717 | 651 | 814 | 226 | 395 | 2631 |
+
+The tests are applied in the order of the columns and each cell is attributed to
+the **first** test it fails, so every row sums to the analysis window. Two
+further causes — an FH value outside 0–100 m, and no usable ALS aggregate
+despite sufficient coverage — are zero in every scene and are omitted here. The
+counts are `exclusion_counts_q2.csv` per scene and
+`outputs/_combined/exclusion_counts_all_q2.csv` pooled, drawn as
+`fig12_exclusions_q2.png` and, cell by cell in space, `fig13_mask_map_q2.png`.
+
+The first column of rejections is geometry, not data loss: the analysis window
+is the rectangle around the footprint, and the flight polygon inside it rarely
+fills it.
+
+**The quality filter is the dominant term at Mbalmayo and Luki.** The quality
+layer behaves like a different variable at each site. Over the Loundoungou
+2026-05-19 scene its 95th percentile is 1.11 — the whole footprint sits below the
+2.0 threshold and nothing at all is cut, which is why that map is solid. Over
+Mbalmayo the *median* is 3.5 and 9.6 in the two scenes, and the filter removes
+53 % and 68 % of the cells that reach it: more than half the footprint falls in
+the failed-retrieval tail.
+
+The filter is not discarding real forest. Over the Mbalmayo 2025-11-24 scene,
+splitting the cells that pass every *other* test by their quality value:
+
+| | n | ALS p90 | BIOMASS FH | bias |
+|---|---|---|---|---|
+| quality ≤ 2 (kept) | 789 | 30.8 m | 25.0 m | −5.8 m |
+| quality > 2 (rejected) | 939 | 30.6 m | 12.0 m | **−18.5 m** |
+
+The ALS canopy is the same height in both groups; BIOMASS reports ~12 m where it
+reports ~25 m next door. The 2025-12-15 scene splits the same way: 1059 rejected
+cells under 30.4 m of ALS canopy, for which BIOMASS reports 9.0 m. These are
+retrieval failures, not short canopy — the same bimodality the threshold was
+derived from. (The 939 and 1059 here are smaller than the quality column of the
+table above, which is a funnel: it also carries the rejected cells that would
+have failed the coverage test as well.)
+
+**Loosening the threshold only makes agreement worse.** Re-running Luki and
+Mbalmayo at a range of thresholds adds cells monotonically and degrades every
+metric monotonically with them:
+
+| Scene | | q ≤ 2 | q ≤ 5 | q ≤ 20 | no filter |
+|---|---|---|---|---|---|
 | Mbalmayo 2025-11-24 | n | 789 | 918 | 1237 | 1728 |
 | | RMSE | 8.58 m | 9.73 m | 11.91 m | 16.43 m |
 | Mbalmayo 2025-12-15 | n | 482 | 626 | 994 | 1541 |
@@ -523,6 +582,20 @@ metrics per quality class in every run, so the choice stays checkable, and
 | Luki 2026-01-14 | n | 342 | 353 | 370 | 415 |
 | | RMSE | 9.29 m | 9.39 m | 9.62 m | 11.57 m |
 
+Pooled over all eight scenes, the three complete runs line up the same way:
+
+| | n | bias | MAE | RMSE | Pearson r | CCC | RMA slope |
+|---|---|---|---|---|---|---|---|
+| `q ≤ 2` (default) | 10 838 | −2.82 m | 5.07 m | **6.71 m** | 0.474 | 0.424 | 0.93 |
+| `q ≤ 20` (`*_q20`) | 12 131 | −4.18 m | 6.25 m | 8.67 m | 0.426 | 0.355 | 1.21 |
+| no filter (`*_allquality`) | 13 462 | −6.08 m | 7.94 m | 11.35 m | 0.382 | 0.275 | 1.55 |
+
+Every added cell makes the product look worse, and the bias grows faster than
+the correlation falls: the cells the quality layer rejects are not noisier
+versions of the same relationship, they are cells where BIOMASS reports a height
+it did not really retrieve. No shift was applied in any of the three runs, so
+they differ by the filter alone.
+
 That is the behaviour a genuinely informative quality layer should show, and it
 is the strongest evidence that 2.0 is not cherry-picking. But it cuts both ways:
 the headline accuracy is **conditional on the threshold** — a stricter cut would
@@ -531,7 +604,9 @@ quality layer says to trust, not the product's accuracy everywhere it reports a
 value. Quote the threshold whenever you quote the RMSE.
 
 **Coverage < 90 % explains the ragged edges** and some of Luki's interior
-speckle — 72 to 209 cells per scene. A ~93 m cell needs 90 % of its area in
+speckle — 72 to 557 cells per scene. At Ipassa it is the largest rejection term
+of all: `mask_combined` removes 4.4 % of its ALS pixels, and its 34.5 km²
+footprint has by far the most edge for a 90 % coverage rule to cut. A ~93 m cell needs 90 % of its area in
 valid, unmasked ALS, so scattered 1 m losses take out whole cells:
 `mask_combined` removes 4.4 % of ALS pixels at Mbalmayo and 3.3 % at Luki
 (mostly `mask_pd02`, pulse density < 2) against 0.9 % at Loundoungou.
@@ -562,38 +637,42 @@ offset describes where the ALS sits relative to BIOMASS and says nothing about a
 Sentinel-2 derived product. Cells are kept only where all three carry data, so
 neither product is credited for covering ground the other one misses.
 
-Pooled over all six scenes, ALS p90 as the reference, n = 4916 cells:
+Pooled over all eight scenes, ALS p90 as the reference, n = 10 767 cells:
 
 | | bias | MAE | RMSE | Pearson r | RMA slope |
 |---|---|---|---|---|---|
-| BIOMASS vs ALS | −4.56 m | 5.67 m | 7.68 m | 0.580 | 1.166 |
-| **ETH vs ALS** | **−1.41 m** | **4.35 m** | **6.07 m** | 0.385 | 0.643 |
-| BIOMASS vs ETH | −3.15 m | 5.22 m | 7.35 m | 0.407 | 1.813 |
+| BIOMASS vs ALS | −2.83 m | 5.06 m | 6.70 m | 0.474 | 0.929 |
+| **ETH vs ALS** | **+1.14 m** | **4.42 m** | **5.90 m** | 0.372 | 0.549 |
+| BIOMASS vs ETH | −3.97 m | 5.17 m | 6.75 m | 0.362 | 1.692 |
 
 Per site, against ALS p90:
 
 | Site | n | BIOMASS bias | BIOMASS RMSE | BIOMASS r | ETH bias | ETH RMSE | ETH r |
 |---|---|---|---|---|---|---|---|
+| Ipassa (Cross) | 5851 | **−1.39 m** | 5.75 m | 0.25 | +3.28 m | 5.75 m | 0.40 |
 | Loundoungou | 2998 | −2.38 m | 4.32 m | 0.25 | −1.95 m | 3.43 m | 0.46 |
 | Luki2025 | 652 | −9.80 m | 13.66 m | 0.25 | −9.86 m | 12.25 m | 0.48 |
 | Mbalmayo | 1266 | −7.01 m | 9.42 m | 0.35 | **+4.22 m** | 6.16 m | 0.65 |
 
 Three things stand out.
 
-**ETH has the lower RMSE at every site**, and the higher within-site correlation
-at every site — 0.46/0.48/0.65 against 0.25/0.25/0.35. On this evidence the
-older, freely available Sentinel-2 product tracks the ALS better than the
-BIOMASS L2A retrieval does over these three forests.
+**ETH has the higher within-site correlation at every site** — 0.40/0.46/0.48/
+0.65 against 0.25/0.25/0.25/0.35 — and the lower RMSE at three of the four. The
+exception is Ipassa, where the two are level at 5.75 m: BIOMASS wins on bias
+(−1.4 m against +3.3 m) and ETH on correlation. Elsewhere the older, freely
+available Sentinel-2 product tracks the ALS at least as well as the BIOMASS L2A
+retrieval does.
 
-**The pooled correlation reverses that ranking** — 0.580 for BIOMASS against
-0.385 for ETH — and it is the pooled number that is misleading here, not the
+**The pooled correlation reverses that ranking** — 0.474 for BIOMASS against
+0.372 for ETH — and it is the pooled number that is misleading here, not the
 per-site ones. The same height-range effect described above is at work: BIOMASS
-separates the three sites more strongly, which inflates r once they are pooled.
-Within any one site it tracks the canopy less well.
+separates the sites more strongly, which inflates r once they are pooled. Within
+any one site it tracks the canopy less well.
 
 **The two products fail in opposite directions at Mbalmayo**: BIOMASS reads
-7.0 m low, ETH 4.2 m high. Everywhere else both read low. Whatever drives the
-Mbalmayo disagreement is not a property of the forest, since the ALS is the same
+7.0 m low, ETH 4.2 m high — and at Ipassa too, where BIOMASS reads 1.4 m low
+against ETH 3.3 m high. At Loundoungou and Luki both read low. Whatever drives
+those disagreements is not a property of the forest, since the ALS is the same
 in both comparisons.
 
 ### ETH against ALS on its own 10 m grid
@@ -605,9 +684,16 @@ does not pool pairs from a different grid into the BIOMASS sample.
 
 | Site | n cells | bias | MAE | RMSE | Pearson r |
 |---|---|---|---|---|---|
-| Loundoungou | 201 129 | +2.54 m | 6.06 m | 8.39 m | 0.25 |
-| Luki2025 | 45 342 | −2.53 m | 10.74 m | 13.24 m | 0.33 |
-| Mbalmayo | 186 157 | +10.02 m | 10.99 m | 13.55 m | 0.42 |
+| Loundoungou | 201 130 | +2.13 m | 5.90 m | 8.15 m | 0.26 |
+| Luki2025 | 45 342 | −3.05 m | 10.84 m | 13.36 m | 0.33 |
+| Mbalmayo | 186 157 | +9.52 m | 10.60 m | 13.17 m | 0.43 |
+| Ipassa (Cross) | 363 752 | +7.58 m | 9.10 m | 11.25 m | 0.28 |
+| Ipassa (Simple) | 67 416 | +7.61 m | 8.75 m | 10.80 m | 0.32 |
+| Amacayacu | 203 803 | +4.42 m | 5.68 m | 7.25 m | **0.60** |
+
+Amacayacu appears here and nowhere else: no `FP_FH__L2A` scene reaches its
+footprint, so it has no BIOMASS comparison at all. It is also the site ETH
+tracks best, by a wide margin — r = 0.60 against 0.26–0.43 elsewhere.
 
 The errors are much larger than on the 93 m grid, and that is the expected
 result rather than a contradiction: a 10 m cell resolves individual crowns and
@@ -662,7 +748,7 @@ cell as one observation. Notation used throughout:
 > site the ALS p90 varies by only ~3 m (Loundoungou), which is comparable to the
 > product's own noise, so r is low almost by construction. Pooling the three
 > sites widens the reference range to SD 6.2 m and r rises from 0.25–0.35 to
-> 0.58 — without the product having become any more accurate. **Read bias and
+> 0.47 — without the product having become any more accurate. **Read bias and
 > RMSE for accuracy; read r only across a real height gradient.**
 
 ### Agreement — are the values actually right?
@@ -682,7 +768,7 @@ cell as one observation. Notation used throughout:
 
 > **Why both are reported.** The gap between them is diagnostic rather than
 > redundant. RMA slope is OLS slope divided by r, so when correlation is weak the
-> two diverge sharply — in the pooled results, OLS 0.67 against RMA 1.16. Quoting
+> two diverge sharply — in the pooled results, OLS 0.44 against RMA 0.93. Quoting
 > either alone would misrepresent the data: the OLS slope confounds true scale
 > error with noise-driven attenuation, while the RMA slope is unstable when r is
 > low. Read them together, and read the residual-vs-height figure, which shows
@@ -706,6 +792,10 @@ not by averaging per-scene metrics, so scenes contribute in proportion to their
 cell counts.
 
 ## Figures
+
+**Every filename below carries the run suffix** — `fig02_scatter_q2.png` for the
+headline `q ≤ 2` run, `_q20` and `_allquality` for the other two. The names are
+written here without it for readability.
 
 Per scene, in `outputs/<site>/<scene>/`:
 
@@ -739,7 +829,7 @@ Pooled across every scene, in `outputs/_combined/`:
 | `fig05_bland_altman_combined.png` | pooled agreement, coloured by site |
 | `fig07_als_statistic_combined.png` | pooled agreement by ALS aggregate |
 | `fig08_quality_classes_combined.png` | pooled error by quality class |
-| `fig09_per_scene.png` | bias, RMSE and r for each of the six scenes |
+| `fig09_per_scene.png` | bias, RMSE and r for each of the eight scenes |
 | `fig10_per_site.png` | the same, pooled within each site |
 | `fig11_exclusions_by_scene.png` | what share of each scene's window went where |
 
@@ -771,6 +861,7 @@ README.md                  this file
 LICENSE                    MIT, code only
 FIGURES.md                 what each figure shows and how it was computed
 config.py                  every tunable setting, with the rationale
+00_normalize_als.py        bring a non-GCA ALS folder into the standard layout
 01_download_biomass.py     search + download from ESA MAAP, per site
 01b_download_eth.py        clip the ETH 10 m canopy height product, per site
 02_compare.py              co-registration, statistics, figures, per scene
@@ -786,6 +877,7 @@ bgt/viz_combined.py        pooled, multi-scene plots
 docs/pipeline.{png,svg}    the detailed processing-pipeline diagram
 docs/pipeline_slide.*      a simplified six-step diagram, for slides
 03_processed_<site>/       the ALS products (input) -- gitignored, supply your own
+03_processed_<site>/<acq>/ one subfolder per acquisition, where a site was flown twice
 data/biomass/<site>/       downloaded BIOMASS products -- gitignored, fetched by step 1
 outputs/<site>/<scene>/    per-scene figures and tables
 outputs/_combined/         pooled figures and tables
@@ -798,14 +890,27 @@ data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
 ## Caveats worth stating in any write-up
 
 * **Time gap, confounded with site.** The ALS-to-BIOMASS gap is ~2 months at
-  Luki, ~14 at Loundoungou and ~21 at Mbalmayo. Because each gap belongs to one
-  site, any site difference and any gap effect are inseparable in this design.
-  Notably the *shortest*-gap site (Luki) has the *worst* agreement, so the gap
+  Luki, ~8 at Ipassa, ~14 at Loundoungou and ~21 at Mbalmayo. Because each gap
+  belongs to one site, any site difference and any gap effect are inseparable in
+  this design. The ordering is not even monotone: the *shortest*-gap site (Luki)
+  has the worst agreement and the second-shortest (Ipassa) the best, so the gap
   is clearly not the dominant term — but it cannot be quantified from these data
   alone.
 * **Luki is small.** 4.1 km² gives only ~330 paired cells per scene, and it was
   the site where the shift search had too few cells to trust. Its statistics
   carry wider uncertainty than the cell counts alone suggest.
+* **Ipassa dominates the pooled sample.** Its 5911 cells are 55 % of the pooled
+  total, so the pooled bias, RMSE and slopes are now largely Ipassa's. The
+  per-site table is the honest read; the pooled row is a weighted average that
+  one site controls.
+* **Ipassa's second acquisition is not an independent site.** `LAS_Simple` lies
+  98 % inside `LAS_Cross` and was flown in the same week, so it is excluded from
+  the pooled sample. Compared per scene it agrees less well (−3.8 m bias against
+  −1.4 m on the same BIOMASS scene) at roughly half the pulse density, which is
+  a hint about pulse-density sensitivity rather than a controlled test of it.
+* **Amacayacu has no BIOMASS comparison**, and its ALS delivery carries no
+  acquisition dates, so its ETH result cannot be placed in time against the 2020
+  ETH epoch.
 * **Different quantities.** ALS measures the height of the first return above
   the modelled ground; BIOMASS FH is derived from P-band tomographic SAR and is
   a model-based estimate of top canopy height. They are not the same
@@ -820,8 +925,8 @@ data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
   reported per quality class so the choice stays checkable; `--quality-max none`
   disables the filter.
 * **The ETH time gap is far larger still.** That map represents 2020, against
-  ALS from Feb 2024 (Mbalmayo), Mar 2025 (Loundoungou) and Oct 2025 (Luki) — a
-  4–6 year gap. Any apparent advantage it has over BIOMASS could be luck rather
+  ALS from Feb 2024 (Mbalmayo), Mar 2025 (Loundoungou), Jul 2025 (Ipassa) and
+  Oct 2025 (Luki) — a 4–6 year gap. Any apparent advantage it has over BIOMASS could be luck rather
   than skill, and the gap is confounded with site in exactly the same way.
 * **ETH heights are quantised to whole metres** — the product is uint8 with 255
   as no-data. This puts a floor of about 0.29 m on any RMSE against it, far
@@ -849,10 +954,6 @@ The code in this repository is released under the MIT License; see
 closed-access third-party data and are not redistributed here, and the BIOMASS
 products carry ESA's own terms.
 
-**Every filename below carries the run suffix** — `fig02_scatter_q2.png` for the
-headline `q ≤ 2` run, `_q20` and `_allquality` for the other two. The names are
-written here without it for readability.
-
 ## References
 
 * Fischer, F. J., Jackson, T., Vincent, G., & Jucker, T. (2024). Robust
@@ -863,11 +964,11 @@ written here without it for readability.
   <https://doi.org/10.1038/s41559-023-02206-6>
 * ESA Biomass Level 2A product catalogue:
   <https://earth.esa.int/eogateway/catalog/biomass-level-2a>
+* BIOMASS Forest Height Products Format Specification,
+  BIO-BPS-FHPFD-ARE-010256, issue 3.4.0 (13 March 2026):
+  <https://earth.esa.int/eogateway/documents/d/earth-online/biomass-forest-height-products-format-specification>
 * ESA MAAP data access:
   <https://catalog.maap.eo.esa.int/doc/examples/ESAMAAP_biomassdataaccess.html>
 
 ALS data: Pierre Ploton & Nicolas Barbier (IRD/AMAP) and collaborators — access
 is closed, please contact the data owners before redistributing.
-* BIOMASS Forest Height Products Format Specification,
-  BIO-BPS-FHPFD-ARE-010256, issue 3.4.0 (13 March 2026):
-  <https://earth.esa.int/eogateway/documents/d/earth-online/biomass-forest-height-products-format-specification>
