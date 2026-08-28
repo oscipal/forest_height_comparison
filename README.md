@@ -22,12 +22,13 @@ python 01_download_biomass.py --token <offline-token>
 python 01b_download_eth.py                         # ETH 10 m product, no token
 python 02_compare.py                               # per-scene results  -> *_q2
 python 02b_compare_eth.py                          # ETH vs ALS on the ETH grid
-python 03_combine.py                               # pooled results     -> *_q2
+python 03_combine.py --site Loundoungou --site Luki2025 \
+    --site Mbalmayo --site Ipassa_LAS_Cross        # pooled results  -> *_q2
 
 python 02_compare.py --quality-max 20               # looser filter     -> *_q20
-python 03_combine.py --suffix _q20
+python 03_combine.py --suffix _q20 <same --site list>
 python 02_compare.py --quality-max none             # no filter  -> *_allquality
-python 03_combine.py --suffix _allquality
+python 03_combine.py --suffix _allquality <same --site list>
 ```
 
 Per-scene results land in `outputs/<site>/<scene>/`, pooled results in
@@ -44,8 +45,14 @@ comes from](#where-the-20-quality-threshold-comes-from) for why the filtered set
 is the headline one.
 
 Sites are **discovered, not configured**: every `03_processed_<site>` folder in
-the repository is picked up automatically, so adding a fourth site means
-dropping in its folder and re-running. `--site <name>` restricts any step.
+the repository is picked up automatically, so adding a site means dropping in
+its folder and re-running. `--site <name>` restricts any step.
+
+The pooling step is the one place that needs its sites named. `03_combine.py`
+otherwise pools everything it finds, which would include `Ipassa_LAS_Simple` —
+a second acquisition lying 98 % inside `Ipassa_LAS_Cross`, so pooling both would
+count the same forest twice. The four sites listed above are the headline
+sample; every other step can be run with no `--site` at all.
 
 ## Data
 
@@ -65,7 +72,7 @@ needs:
 | `chm_lspikefree.tif` | the canopy height reference | yes |
 | `mask_combined.tif` | quality masking | yes |
 | `outline_WGS84.shp` (+ `.dbf`, `.shx`, `.prj`) | building the BIOMASS catalogue search box | yes |
-| `summary_processing.csv` | site name and acquisition dates, stamped on every figure | yes |
+| `summary_processing.csv` | site name and acquisition dates, stamped on every figure | no — without it the figures stamp "date unknown" |
 | `chm_tin.tif` | the `--chm-secondary` sensitivity check | drop it with `--chm-secondary none` |
 | `mask_pd04.tif`, `mask_steep.tif` | `--strict-mask` only | no |
 
@@ -510,7 +517,7 @@ informative and that 2.0 is not cherry-picked.
 
 The cost is that the headline accuracy is **conditional on the threshold**, and
 a stricter cut would look better still. Quote it whenever you quote the RMSE.
-`metrics_by_quality_class.csv` and `fig08_quality_classes.png` report the
+`metrics_by_quality_class_q2.csv` and `fig08_quality_classes_q2.png` report the
 metrics per quality class in every run, so the choice stays checkable, and
 `--quality-max none` disables the filter entirely.
 
@@ -616,7 +623,9 @@ valid, unmasked ALS, so scattered 1 m losses take out whole cells:
 250 and 933 cells.
 
 Running with `--quality-max none` fills the maps in completely; what that costs
-in bias is in `metrics_by_quality_class.csv` and `fig08_quality_classes.png`.
+in bias is in `metrics_by_quality_class_q2.csv` and
+`fig08_quality_classes_q2.png` — or simply read the `_allquality` set, which is
+that run in full.
 
 ### Two grids, two questions
 
@@ -777,7 +786,8 @@ cell as one observation. Notation used throughout:
 ### Stratified tables
 
 The same metric set is recomputed over subsets, so a single average never hides
-structure:
+structure. Each file carries the run suffix on disk (`metrics_by_height_bin_q2.csv`
+and so on):
 
 | Table | Strata | Purpose |
 |---|---|---|
@@ -806,7 +816,7 @@ Per scene, in `outputs/<site>/<scene>/`:
 | `fig03_residuals.png` | residual vs. ALS height, with binned mean ± SD |
 | `fig04_distributions.png` | marginal histograms and empirical CDFs |
 | `fig05_bland_altman.png` | agreement plot with bias and limits of agreement |
-| `fig06_shift_search.png` | the co-registration objective surface and its verdict — written only for the scenes where the search ran (five of six) |
+| `fig06_shift_search.png` | the co-registration objective surface and its verdict — written only for the scenes where the search ran (seven of the eight) |
 | `fig07_als_statistic.png` | agreement by choice of ALS aggregate |
 | `fig08_quality_classes.png` | error by BIOMASS quality-layer class |
 | `fig12_exclusions.png` | funnel of how many cells each filter removed |
