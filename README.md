@@ -461,6 +461,59 @@ metric monotonically with them:
 
 | Scene | | q ≤ 2 | q ≤ 5 | q ≤ 20 | no filter |
 |---|---|---|---|---|---|
+### Where the 2.0 quality threshold comes from
+
+Every `FP_FH__L2A` scene ships a per-cell quality layer alongside the height
+raster, and `--quality-max` (default 2.0) is the single most consequential
+filter in the comparison — at Mbalmayo it removes more cells than everything
+else combined. So it is worth being explicit about where that number comes from.
+
+**What the product documents.** Almost nothing. The format specification
+(BIO-BPS-FHPFD-ARE-010256, issue 3.4.0) defines the container and not the
+content: a single-band float32 COG, no-data −9999, with its `ImageDescription`
+tag fixed to `"BIOMASS L2a FP_FH__L2A: Forest height quality"`, and the same
+bare label repeated in the annotation XML. No units, no valid range, no stated
+direction, no recommended cut.
+
+**What can be inferred from it.** The processing-parameters section of the same
+specification documents `uncertaintyValidvaluesLimits` — "uncertainty valid
+values limits applied, **as a percentage**: estimates out of this limits have
+been discarded and set to no data value". In these products that parameter reads
+0 to 100, and the quality rasters span exactly [0.000, 100.000] in all seven
+scenes, with nothing above the ceiling. The layer is therefore most likely a
+**relative height uncertainty in percent**, on which `--quality-max 2.0` keeps
+cells whose retrieval uncertainty is at most 2 %. This is an inference from the
+range and from the one uncertainty quantity the product documents, not a
+statement the specification makes.
+
+**Why 2, on the data.** The value was fixed at Loundoungou, where the
+distribution over the footprint is sharply bimodal. Across both scenes the main
+population stops at 1.14 and the tail resumes at ~8, and of the 3071 cells in
+the two footprints exactly **4** lie between those two values: the gap is
+essentially empty, and the tail cells carry a −15 to −40 m bias against the ALS.
+Anywhere inside the gap gives the same answer, so the exact value does not
+matter there — 2.0 is the round number in the middle of it.
+
+The threshold is applied at every site, Loundoungou included; it simply has
+almost nothing to remove there. In the 2026-05-19 scene no cell over the
+footprint exceeds 1.1, so the filter takes out **zero** cells and the map is
+solid. The 2026-06-09 scene does have a tail — its 95th percentile over the
+footprint is 24.8 — and the filter removes 70 of 1126 cells.
+
+It does not transfer for free. At Luki and Mbalmayo the distribution is
+continuous — scene medians 1.7 to 4.1, 95th percentiles 52 to 75 — so there is
+no gap to sit in, and the threshold has to be justified on outcome instead. Two
+checks in the next section do that: the rejected cells sit under the same ALS
+canopy as the kept ones while BIOMASS reports a third of the height, and
+loosening the cut degrades every metric monotonically. Both say the layer is
+informative and that 2.0 is not cherry-picked.
+
+The cost is that the headline accuracy is **conditional on the threshold**, and
+a stricter cut would look better still. Quote it whenever you quote the RMSE.
+`metrics_by_quality_class.csv` and `fig08_quality_classes.png` report the
+metrics per quality class in every run, so the choice stays checkable, and
+`--quality-max none` disables the filter entirely.
+
 | Mbalmayo 2025-11-24 | n | 789 | 918 | 1237 | 1728 |
 | | RMSE | 8.58 m | 9.73 m | 11.91 m | 16.43 m |
 | Mbalmayo 2025-12-15 | n | 482 | 626 | 994 | 1541 |
@@ -757,12 +810,15 @@ data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
   the modelled ground; BIOMASS FH is derived from P-band tomographic SAR and is
   a model-based estimate of top canopy height. They are not the same
   measurement, and a non-unit slope is an expected result rather than an error.
-* **Quality layer semantics.** The annotation files label the layer only as
-  "Forest height quality", without units. The default threshold of 2.0 is
-  derived from the observed bimodality of the values, **not** from the product
-  specification — worth confirming against the format spec before publishing.
-  The metrics are always reported per quality class so the choice stays
-  checkable; `--quality-max none` disables the filter.
+* **Quality layer semantics.** The format specification labels the layer only
+  as "Forest height quality", with no units, range or direction, so reading it
+  as a relative uncertainty in percent is an inference from the documented
+  0–100 % uncertainty limits and the observed value range, not something the
+  product states. The threshold of 2.0 is derived from the data, not from the
+  specification — see [Where the 2.0 quality threshold comes
+  from](#where-the-20-quality-threshold-comes-from). The metrics are always
+  reported per quality class so the choice stays checkable; `--quality-max none`
+  disables the filter.
 * **The ETH time gap is far larger still.** That map represents 2020, against
   ALS from Feb 2024 (Mbalmayo), Mar 2025 (Loundoungou) and Oct 2025 (Luki) — a
   4–6 year gap. Any apparent advantage it has over BIOMASS could be luck rather
@@ -812,3 +868,6 @@ written here without it for readability.
 
 ALS data: Pierre Ploton & Nicolas Barbier (IRD/AMAP) and collaborators — access
 is closed, please contact the data owners before redistributing.
+* BIOMASS Forest Height Products Format Specification,
+  BIO-BPS-FHPFD-ARE-010256, issue 3.4.0 (13 March 2026):
+  <https://earth.esa.int/eogateway/documents/d/earth-online/biomass-forest-height-products-format-specification>
