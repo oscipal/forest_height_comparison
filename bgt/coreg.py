@@ -171,9 +171,14 @@ def load_fh(
             transform=src.transform,
         )
         window = window.round_offsets(op="floor").round_lengths(op="ceil")
-        window = window.intersection(
-            rasterio.windows.Window(0, 0, src.width, src.height)
-        )
+        full = rasterio.windows.Window(0, 0, src.width, src.height)
+        # A scene can be catalogued as overlapping the footprint and still not
+        # reach it: the frames are large and their bounding boxes generous. That
+        # leaves the two windows disjoint, which rasterio raises on rather than
+        # returning an empty window, so it is tested for first.
+        if not rasterio.windows.intersect([window, full]):
+            return None
+        window = window.intersection(full)
         if window.width < 2 or window.height < 2:
             return None
 
