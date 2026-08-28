@@ -31,11 +31,13 @@ python 02_compare.py --quality-max 20               # looser filter     -> *_q20
 python 03_combine.py --suffix _q20 <same --site list>
 python 02_compare.py --quality-max none             # no filter  -> *_allquality
 python 03_combine.py --suffix _allquality <same --site list>
+
+python 04_compare_agbd.py --site Amacayacu         # AGBD vs P-band backscatter
 ```
 
 Per-scene results land in `outputs/<site>/<scene>/`, pooled results in
-`outputs/_combined/`, and the ETH-on-its-own-grid comparison in
-`outputs_eth/<site>/`.
+`outputs/_combined/`, the ETH-on-its-own-grid comparison in `outputs_eth/<site>/`,
+and the biomass comparison of step 4 in `outputs_agbd/<site>/`.
 
 **Every output is named after the quality filter that produced it** — `_q2` for
 the default cut, `_q20`, `_allquality` for no cut — so the three complete sets
@@ -879,10 +881,13 @@ config.py                  every tunable setting, with the rationale
 02_compare.py              co-registration, statistics, figures, per scene
 02b_compare_eth.py         ETH vs ALS on the ETH grid, per site
 03_combine.py              pooled statistics and figures across all scenes
-bgt/replot.py              rebuilding figures from a finished run's tables
+04_compare_agbd.py         ALS biomass vs tomographic HV and L1b backscatter
 bgt/maap.py                token exchange, STAC search, streaming download
 bgt/als.py                 ALS CHM loading, masking and site metadata
 bgt/eth.py                 ETH canopy height loading
+bgt/agbd.py                the AGBD map and the tomographic HV layers on its grid
+bgt/l1b.py                 BIOMASS L1b backscatter, geocoded onto that grid
+bgt/replot.py              rebuilding figures from a finished run's tables
 bgt/coreg.py               fine grid, block aggregation, shift search
 bgt/metrics.py             validation statistics
 bgt/viz.py                 figure style and per-scene plots
@@ -898,6 +903,10 @@ outputs/summary_all_products_q2.csv  one row per scene, per run suffix
 outputs_eth/<site>/        ETH-vs-ALS results on the ETH grid
 outputs_eth/summary_eth_by_site.csv  one row per site, ETH on its own grid
 data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
+data/AGBD_<site>.tif       ALS biomass map (input) -- gitignored, supply your own
+data/Tomo/                 tomographic HV layers (input) -- gitignored
+data/l1b/<scene>/          cached L1b annotation and LUT -- gitignored, step 4
+outputs_agbd/<site>/       AGBD-vs-backscatter figures and tables
 ```
 
 ## Caveats worth stating in any write-up
