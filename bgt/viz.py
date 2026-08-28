@@ -25,6 +25,7 @@ from matplotlib.colors import LinearSegmentedColormap, ListedColormap, TwoSlopeN
 from matplotlib.patches import Patch
 
 import config
+from bgt import metrics
 from bgt.metrics import compute_metrics
 
 # --------------------------------------------------------------------------- #
@@ -41,6 +42,10 @@ AXIS = "#c3c2b7"
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]
 BLUE, ORANGE, AQUA = SERIES[0], SERIES[1], SERIES[2]
 RED = "#e34948"
+
+#: Fraction of the sample left outside each end of the default y range of
+#: :func:`plot_relation`.
+RELATION_Y_TAIL = 0.005
 
 #: Sequential ramp for magnitude (canopy height, point density).
 CMAP_HEIGHT = LinearSegmentedColormap.from_list(
@@ -149,12 +154,10 @@ def plot_maps(
 ) -> Path:
     """Side-by-side height maps and their difference, on the product grid."""
     residual = fh_grid - als_grid
-    both = np.concatenate(
-        [als_grid[np.isfinite(als_grid)].ravel(), fh_grid[np.isfinite(fh_grid)].ravel()]
-    )
-    vmin, vmax = (np.percentile(both, [1, 99]) if both.size else (0, 50))
-    rlim = float(np.nanpercentile(np.abs(residual), 98)) if np.isfinite(residual).any() else 1.0
-    rlim = max(rlim, 1e-3)
+    # Both scales are fixed rather than fitted to the scene: a colour has to
+    # mean the same height, and the same error, on every map in the repository.
+    vmin, vmax = config.HEIGHT_LIMITS_M
+    rlim = float(config.RESIDUAL_LIMIT_M)
 
     fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.6), constrained_layout=True)
     panels = [
@@ -180,29 +183,17 @@ def plot_maps(
 
 
 def height_limits(*arrays: np.ndarray) -> tuple[float, float]:
-    """One height-axis range covering every series passed in.
+    """The fixed height-axis range every scatter and residual plot uses.
 
-    Computed once per comparison and handed to all of its figures, so the
-    scatters and the residual plot of a scene share a scale and can be read
-    against each other. Limits are rounded outward to
-    ``config.SCATTER_LIMIT_STEP_M`` and are never pulled below zero by the
-    rounding when the data itself is non-negative.
+    Fixed rather than fitted, so figures from different scenes, from the pooled
+    run and from the ETH grid are directly comparable. Cells outside the range
+    are drawn outside the axes and so are not visible; they remain in every
+    metric, since the statistics are computed on the paired sample rather than
+    on the plotted subset. The arguments are ignored and kept so that a
+    data-driven range can be restored in one place.
     """
-    step = float(config.SCATTER_LIMIT_STEP_M)
-    finite = [np.asarray(a, dtype=float) for a in arrays]
-    finite = [a[np.isfinite(a)] for a in finite]
-    finite = [a for a in finite if a.size]
-    if not finite:
-        return 0.0, step
-    lo = min(float(a.min()) for a in finite)
-    hi = max(float(a.max()) for a in finite)
-    out_lo = np.floor(lo / step) * step
-    out_hi = np.ceil(hi / step) * step
-    if lo >= 0.0:
-        out_lo = max(out_lo, 0.0)
-    if out_hi <= out_lo:
-        out_hi = out_lo + step
-    return float(out_lo), float(out_hi)
+    lo, hi = config.HEIGHT_LIMITS_M
+    return float(lo), float(hi)
 
 
 def plot_scatter(
@@ -617,4 +608,78 @@ def plot_mask_map(
     ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0),
               borderaxespad=0.0, title="cell status", alignment="left")
     _titleblock(fig, f"Why each {grid_name} cell was kept or dropped", subtitle)
+    return _save(fig, out_path)
+
+
+def plot_relation(
+    x: np.ndarray,
+    y: np.ndarray,
+    out_path: Path,
+    x_label: str,
+    y_label: str,
+    title: str,
+    subtitle: str = "",
+    x_bin_width: float | None = None,
+    y_lims: tuple[float, float] | None = None,
+) -> Path:
+    """Density scatter of two quantities that do not share a unit.
+
+    The counterpart to :func:`plot_scatter`, which compares two estimates of the
+    same thing and so is built around the 1:1 line. Here the units differ, so
+    there is no 1:1 line and no bias: what the figure has to show is the shape
+    of the relation. The binned median with its interquartile band carries that
+    -- it is where saturation becomes visible -- and the OLS line is drawn only
+    as the linear reference the correlation refers to.
+    """
+    ok = np.isfinite(x) & np.isfinite(y)
+    a, b = np.asarray(x)[ok], np.asarray(y)[ok]
+    m = metrics.association(a, b)
+
+    x_lims = (float(np.floor(a.min())), float(np.ceil(a.max())))
+    # A handful of very low cells -- open water, a clearing -- can span more of
+    # the y range than the whole population does, leaving the relation squashed
+    # into a strip. The default range is robust, and the annotation says how
+    # many cells fall outside it so nothing is dropped quietly.
+    y_lims = y_lims or (
+        float(np.floor(np.percentile(b, 100.0 * RELATION_Y_TAIL))),
+        float(np.ceil(np.percentile(b, 100.0 * (1.0 - RELATION_Y_TAIL)))),
+    )
+    off_scale = int(np.count_nonzero((b < y_lims[0]) | (b > y_lims[1])))
+
+    fig, ax = plt.subplots(figsize=(6.8, 6.0), constrained_layout=True)
+    hb = ax.hexbin(a, b, gridsize=44, extent=(*x_lims, *y_lims), mincnt=1,
+                   cmap=CMAP_HEIGHT, linewidths=0.0)
+    cb = fig.colorbar(hb, ax=ax, fraction=0.046, pad=0.02)
+    cb.set_label("cells per bin", size=8, color=INK_SECONDARY)
+    cb.outline.set_visible(False)
+
+    grid = np.array(x_lims)
+    ax.plot(grid, m["ols_slope"] * grid + m["ols_intercept"], color=ORANGE, lw=2.0,
+            label=f"OLS  y = {m['ols_slope']:.3g}x {m['ols_intercept']:+.3g}", zorder=4)
+
+    width = x_bin_width or (x_lims[1] - x_lims[0]) / 12.0
+    edges = np.arange(x_lims[0], x_lims[1] + width, width)
+    profile = metrics.binned_profile(a, b, edges)
+    if not profile.empty:
+        ax.fill_between(profile["x_centre"], profile["y_q25"], profile["y_q75"],
+                        color=AQUA, alpha=0.18, linewidth=0, zorder=3)
+        ax.plot(profile["x_centre"], profile["y_median"], color=AQUA, lw=2.0,
+                marker="o", markersize=3.5,
+                label=f"median per {width:g}-wide bin (IQR shaded)", zorder=5)
+
+    ax.set_xlim(x_lims)
+    ax.set_ylim(y_lims)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    _titleblock(fig, title, subtitle)
+    ax.legend(loc="lower right")
+    _annotate(
+        ax,
+        "\n".join([
+            f"n = {m['n']:.0f} cells",
+            f"Pearson r = {m['pearson_r']:.3f}   R2 = {m['r2_fit']:.3f}",
+            f"Spearman rho = {m['spearman_rho']:.3f}",
+            f"scatter about fit = {m['rmse_fit']:.3g}",
+        ] + ([f"{off_scale} cells outside the y range"] if off_scale else [])),
+    )
     return _save(fig, out_path)

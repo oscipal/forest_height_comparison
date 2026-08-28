@@ -7,7 +7,8 @@ results mean.
 Per-scene figures are written to `outputs/<site>/<scene>/` by `02_compare.py`
 (via `bgt/viz.py`); pooled figures to `outputs/_combined/` by `03_combine.py`
 (via `bgt/viz_combined.py`). Sections 2-12 cover the per-scene figures, section
-13 the pooled ones.
+13 the pooled ones, and section 16 the biomass figures `04_compare_agbd.py`
+writes to `outputs_agbd/<site>/`.
 
 ---
 
@@ -119,14 +120,16 @@ plot rather than dots, since the cells overplot heavily.
 * **Box** — n, bias, MAE, RMSE (absolute and as a % of the ALS mean), Pearson r,
   Lin's concordance correlation, and R² against the 1:1 line
 
-Both axes span the **same range**, and the aspect is locked to equal, so the 1:1
-line sits at exactly 45°. That range is shared by every scatter and residual plot
-of the same comparison — `fig02`, `fig03`, `fig09` and `fig10` of one scene all
-use one range, taken from that scene's ALS, BIOMASS and ETH values together, and
-rounded outward to a multiple of `config.SCATTER_LIMIT_STEP_M` (5 m). So the
-BIOMASS and ETH panels of a scene can be read directly against each other, while
-a sparse scene is still drawn at a scale that fits it. The pooled figures use the
-pooled range, and the ETH-grid figures their site's.
+Both axes span **0–50 m** (`config.SCATTER_LIMITS_M`) and the aspect is locked to
+equal, so the 1:1 line sits at exactly 45°. The range is fixed for every figure
+in the repository — every scene, the pooled plots and the ETH grid — so any two
+can be laid side by side and read against each other without checking their axes
+first.
+
+About 0.2 % of cells carry an ALS aggregate above 50 m (the tallest is 63 m on
+the BIOMASS grid, 76 m on the ETH grid) and fall outside the drawn area. They are
+still in every statistic: the metrics box, both fits and every table are computed
+on the whole paired sample, not on the part of it that fits inside the axes.
 
 ---
 
@@ -143,9 +146,9 @@ pooled range, and the ETH-grid figures their site's.
 (0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 m), left-closed. Bins holding fewer
 than 3 cells are dropped rather than plotted with meaningless spread.
 
-The height axis uses the scene's shared range, the same one the scatters use, so
-the panels line up. The residual axis is left free, since its useful span differs
-by an order of magnitude between sites.
+The height axis uses the same fixed 0–50 m range as the scatters, so the panels
+line up. The residual axis is left free, since its useful span differs by an
+order of magnitude between sites.
 
 ---
 
@@ -462,5 +465,81 @@ coverage rule, same ALS statistic — and no shift was applied in any of them, s
 a difference between two of these figures is the quality filter and nothing
 else. Read them together: the default set is the headline result, and the two
 looser sets are what says whether the filter is doing real work. The axis range
-is computed per run, so a variant's scatter may be drawn on a wider range than
-its default counterpart.
+is the same fixed 0–50 m in all three, so a variant's scatter is directly
+comparable with its default counterpart.
+
+---
+
+## 16. The biomass figures (`outputs_agbd/<site>/`)
+
+Written by `04_compare_agbd.py` via `viz.plot_relation`. These compare the ALS
+**above-ground biomass density** map against a P-band observable, so the two
+axes carry different units. That changes what the figure can say and how it is
+built: there is no 1:1 line, no bias and no RMSE against the reference, because
+nothing here is an estimate of anything else. What the figures show is the
+*association* — and, in the binned median, its shape.
+
+Both use the same construction:
+
+* **x** — ALS above-ground biomass density per 50 m cell (t/ha), band `AGBD` of
+  `data/AGBD_<site>.tif`
+* **Hexagons** — count of paired cells per bin (44 across the range), light → dark
+* **Orange line** — ordinary least squares fit of the observable on AGBD
+* **Green line and band** — median of the observable in each 25 t/ha bin, with
+  the interquartile range shaded. This is the element that shows saturation: a
+  relation can hold a respectable correlation while its median flattens out
+* **Box** — n, Pearson r and its R², Spearman ρ, the scatter about the fitted
+  line, and how many cells fall outside the drawn y range
+
+The y range is the 0.5th to 99.5th percentile of the observable, rounded
+outward. A handful of very dark cells — open water, a clearing — otherwise span
+more of the axis than the whole population does. Every statistic is computed on
+the complete paired sample, and the box states how many cells the axes cut off.
+
+**The paired sample** is every cell that carries an AGBD estimate, has at most
+`--max-masked` (default 25 %) of its ALS area rejected by `mask_combined`, and
+has a value in the layer being compared.
+
+### `scatter_tomo_hv_<h>m.png` — Tomographic HV power vs biomass
+
+* **y** — normalised tomographic HV power at *h* metres above the ground, in the
+  layer's own 8-bit DN, from `data/Tomo/Tomo_hv_norm_<h>.tif`
+
+The tomographic layers carry no geotransform: they are written on exactly the
+grid of the AGBD raster, and are paired with it **by pixel index**, which the
+loader enforces by rejecting any layer whose shape differs. They write a literal
+0 outside the reconstructed area — the same wedge along one edge at every
+height — and that 0 is read as no-data, not as zero returned power.
+
+### `scatter_l1b_<pol>.png` — BIOMASS L1b backscatter vs biomass
+
+* **y** — γ⁰ (or σ⁰) of one polarimetric channel of a single L1b DGM scene, in dB
+
+The caption names the scene, its acquisition date, orbit direction and WRS grid
+code. The L1b product is a detected **ground-range** image with no geotransform,
+so it is geolocated from its own annotation and LUT: image row → azimuth time,
+image column → ground range → slant-range time, then latitude, longitude and the
+beta-to-gamma factor are interpolated from the LUT at that pair of times. Pixels
+are beta-nought *amplitude*; squaring gives beta-nought power and the LUT factor
+converts it.
+
+The pixels landing in a cell are averaged **in linear power**, and only the cell
+mean is turned into dB — averaging dB would bias the mean low. At about 4-5 L1b
+pixels per 50 m cell the speckle in a single scene is barely reduced, which is
+most of the scatter in the figure.
+
+That grid is also saved as a raster, on the AGBD grid and CRS, for mapping or
+for re-checking the geolocation with a shift test. It goes to
+`data/l1b/<scene>/<site>_<pol>_db.tif`, beside the annotation and LUT it came
+from: `outputs_agbd/` holds only figures and tables.
+
+### Tables
+
+`paired_cells_agbd_<h>m.csv` is the paired sample itself, one row per cell —
+its row and column on the AGBD grid, the AGBD value, the masked fraction, the
+tomographic DN, and, when the L1b half ran, the backscatter in dB and how many
+L1b pixels landed in the cell. `summary_agbd_<h>m.csv` is one row per
+observable: n, Pearson r, Spearman ρ, both fit coefficients and R². Both are
+named after the tomographic height of the run that wrote them, so a run at a
+different height cannot overwrite another's tables. `l1b_scenes.csv` lists every
+L1b scene that fully covers the site, which is what `--list-scenes` prints.

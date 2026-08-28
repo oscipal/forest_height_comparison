@@ -338,17 +338,95 @@ def quality_suffix(quality_max: float | None) -> str:
     return "_q" + f"{quality_max:g}".replace(".", "p")
 
 
-#: Rounding step, in metres, for the shared height axis of the scatter and
-#: residual figures.
+#: Fixed height range, in metres, shared by every figure: the axes of the
+#: scatter and residual plots, and the colour scale of the height maps.
 #:
-#: The range itself is taken from the data, but every figure belonging to the
-#: same comparison shares one range: all four scatter/residual plots of a scene
-#: use that scene's range, the pooled figures use the pooled range, and the
-#: ETH-grid figures use their site's. So BIOMASS-vs-ALS and ETH-vs-ALS for one
-#: scene can be laid side by side, while a sparse scene is still drawn at a
-#: scale that fits it.
+#: One range for the whole repository -- every scene, the pooled plots and the
+#: ETH grid -- so any two figures can be laid side by side and read against each
+#: other without checking their scales first. A colour means one height
+#: everywhere, and a point in one place means one pair of values everywhere.
 #:
-#: Limits are rounded outward to a multiple of this step (and never below 0 for
-#: non-negative data), which keeps the tick labels round and makes scenes of
-#: similar stature land on the same range anyway.
-SCATTER_LIMIT_STEP_M = 5.0
+#: The range does not cover the full data. About 0.2 % of cells carry an ALS
+#: aggregate above 50 m (the tallest is 63 m on the BIOMASS grid and 76 m on the
+#: ETH grid): on the scatters those points fall outside the drawn area, and on
+#: the maps their cells saturate at the top of the colour scale. They are still
+#: in every statistic -- the metrics boxes, the fits and the tables are computed
+#: on the whole paired sample, not on what fits inside the figure.
+HEIGHT_LIMITS_M = (0.0, 50.0)
+
+#: Half-range, in metres, of the diverging colour scale on the difference panel
+#: of the height maps; the scale runs from -this to +this, centred on zero.
+#:
+#: Also fixed, and for the same reason: a difference map is only readable
+#: against another one if the same colour means the same error. 20 m covers the
+#: 99th percentile of |residual| in the default run; larger errors saturate,
+#: which is the honest reading of a cell the product got badly wrong.
+RESIDUAL_LIMIT_M = 20.0
+
+
+# --------------------------------------------------------------------------- #
+# AGBD reference map, tomographic HV layers, and BIOMASS L1B backscatter
+# --------------------------------------------------------------------------- #
+#
+# A separate comparison from the forest-height one above: it puts an ALS-derived
+# above-ground biomass density map against two P-band observables -- the
+# normalised tomographic HV power at a chosen height, and the HV backscatter of
+# a single L1B ground-range scene.
+
+#: Where the AGBD reference maps live, one per site.
+AGBD_DIR = ROOT / "data"
+
+#: File name of a site's AGBD map; ``{site}`` is the site name.
+AGBD_TEMPLATE = "AGBD_{site}.tif"
+
+#: Band descriptions inside that raster. Bands are looked up by name, not index,
+#: so a map written with a different band order still reads correctly.
+AGBD_BAND_NAME = "AGBD"
+AGBD_MASK_BAND_NAME = "mask_combined"
+
+#: Cells whose ALS mask fraction exceeds this are dropped. 0 keeps only wholly
+#: unmasked cells, 1 keeps every cell that carries an AGBD estimate.
+AGBD_MAX_MASKED = 0.25
+
+#: Where the tomographic HV layers live, and how they are named. Each file holds
+#: the normalised HV power at one height above the ground, on the AGBD grid.
+TOMO_DIR = ROOT / "data" / "Tomo"
+TOMO_TEMPLATE = "Tomo_hv_norm_{height}.tif"
+
+#: Height, in metres above the ground, of the tomographic layer compared by
+#: default.
+TOMO_HEIGHT_M = 30
+
+#: The tomographic layers are 8-bit with no no-data value declared, and write a
+#: literal 0 outside the reconstructed area -- a wedge along one edge of the
+#: grid, identifiable because it is the same wedge at every height. Zero is
+#: therefore read as no-data rather than as zero returned power. Set to None to
+#: keep it.
+TOMO_NODATA_DN = 0
+
+#: STAC collection holding the BIOMASS Level-1b detected ground-range products.
+#: The collection mixes swaths (S1/S2/S3), so no single product type is fixed.
+L1B_COLLECTION = "BiomassLevel1b"
+
+#: Polarimetric channel order of the L1B measurement GeoTIFF. The file itself
+#: states it in its ``PolarisationsSequence`` tag, which is what the reader
+#: trusts; this is only the fallback.
+L1B_POLARISATIONS = ("HH", "HV", "VH", "VV")
+
+#: Polarisation compared against AGBD.
+L1B_POLARISATION = "HV"
+
+#: Radiometric convention. ``gammaNought`` references the backscatter to the
+#: area perpendicular to the line of sight and is the usual predictor in P-band
+#: biomass retrieval; ``sigmaNought`` references it to the ground area. Both are
+#: stored in the product's LUT as multiplicative factors on beta-nought.
+L1B_RADIOMETRY = "gammaNought"
+
+#: Degrees added around the AGBD footprint when cutting the L1B window.
+L1B_BUFFER_DEG = 0.01
+
+#: Cached L1B annotation, LUT and extracted windows.
+L1B_DIR = ROOT / "data" / "l1b"
+
+#: Where the AGBD comparison writes its figures and tables.
+AGBD_OUTPUT_DIR = ROOT / "outputs_agbd"
