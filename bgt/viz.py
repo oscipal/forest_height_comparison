@@ -179,6 +179,32 @@ def plot_maps(
     return _save(fig, out_path)
 
 
+def height_limits(*arrays: np.ndarray) -> tuple[float, float]:
+    """One height-axis range covering every series passed in.
+
+    Computed once per comparison and handed to all of its figures, so the
+    scatters and the residual plot of a scene share a scale and can be read
+    against each other. Limits are rounded outward to
+    ``config.SCATTER_LIMIT_STEP_M`` and are never pulled below zero by the
+    rounding when the data itself is non-negative.
+    """
+    step = float(config.SCATTER_LIMIT_STEP_M)
+    finite = [np.asarray(a, dtype=float) for a in arrays]
+    finite = [a[np.isfinite(a)] for a in finite]
+    finite = [a for a in finite if a.size]
+    if not finite:
+        return 0.0, step
+    lo = min(float(a.min()) for a in finite)
+    hi = max(float(a.max()) for a in finite)
+    out_lo = np.floor(lo / step) * step
+    out_hi = np.ceil(hi / step) * step
+    if lo >= 0.0:
+        out_lo = max(out_lo, 0.0)
+    if out_hi <= out_lo:
+        out_hi = out_lo + step
+    return float(out_lo), float(out_hi)
+
+
 def plot_scatter(
     reference: np.ndarray,
     product: np.ndarray,
@@ -187,16 +213,18 @@ def plot_scatter(
     prod_label: str = "BIOMASS L2A forest height (m)",
     subtitle: str = "",
     prod_short: str = "BIOMASS",
+    lims: tuple[float, float] | None = None,
 ) -> Path:
-    """Density scatter against the 1:1 line, with OLS and RMA fits."""
+    """Density scatter against the 1:1 line, with OLS and RMA fits.
+
+    ``lims`` is the shared height range for the comparison this figure belongs
+    to; without it the figure falls back to its own data.
+    """
     ok = np.isfinite(reference) & np.isfinite(product)
     x, y = np.asarray(reference)[ok], np.asarray(product)[ok]
     m = compute_metrics(x, y)
 
-    lo = float(min(x.min(), y.min()))
-    hi = float(max(x.max(), y.max()))
-    pad = 0.05 * (hi - lo)
-    lims = (lo - pad, hi + pad)
+    lims = lims or height_limits(x, y)
 
     fig, ax = plt.subplots(figsize=(6.4, 6.2), constrained_layout=True)
     hb = ax.hexbin(x, y, gridsize=42, extent=(*lims, *lims), mincnt=1,
@@ -241,8 +269,14 @@ def plot_residuals(
     bins: list[float] | None = None,
     subtitle: str = "",
     prod_short: str = "BIOMASS",
+    lims: tuple[float, float] | None = None,
 ) -> Path:
-    """Residual against reference height, with binned mean and spread."""
+    """Residual against reference height, with binned mean and spread.
+
+    ``lims`` fixes the height axis to the comparison's shared range; the
+    residual axis is left free, since its useful span differs by an order of
+    magnitude between sites.
+    """
     bins = bins or config.HEIGHT_BINS
     ok = np.isfinite(reference) & np.isfinite(product)
     x, y = np.asarray(reference)[ok], np.asarray(product)[ok]
@@ -263,6 +297,7 @@ def plot_residuals(
                     marker="o", ms=6, capsize=4, elinewidth=1.6, zorder=5,
                     markeredgecolor=SURFACE, markeredgewidth=1.2,
                     label="binned mean +/- 1 SD")
+    ax.set_xlim(lims or height_limits(x))
     ax.set_xlabel(ref_label)
     ax.set_ylabel(f"residual, {prod_short} - ALS (m)")
     _titleblock(fig, "Residual structure across the canopy height range", subtitle)

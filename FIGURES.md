@@ -114,8 +114,14 @@ plot rather than dots, since the cells overplot heavily.
 * **Box** — n, bias, MAE, RMSE (absolute and as a % of the ALS mean), Pearson r,
   Lin's concordance correlation, and R² against the 1:1 line
 
-Both axes span the same padded range and the aspect is locked to equal, so the
-1:1 line sits at exactly 45°.
+Both axes span the **same range**, and the aspect is locked to equal, so the 1:1
+line sits at exactly 45°. That range is shared by every scatter and residual plot
+of the same comparison — `fig02`, `fig03`, `fig09` and `fig10` of one scene all
+use one range, taken from that scene's ALS, BIOMASS and ETH values together, and
+rounded outward to a multiple of `config.SCATTER_LIMIT_STEP_M` (5 m). So the
+BIOMASS and ETH panels of a scene can be read directly against each other, while
+a sparse scene is still drawn at a scale that fits it. The pooled figures use the
+pooled range, and the ETH-grid figures their site's.
 
 ---
 
@@ -131,6 +137,10 @@ Both axes span the same padded range and the aspect is locked to equal, so the
 **Binning.** Bins are the fixed edges in `config.HEIGHT_BINS`
 (0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100 m), left-closed. Bins holding fewer
 than 3 cells are dropped rather than plotted with meaningless spread.
+
+The height axis uses the scene's shared range, the same one the scatters use, so
+the panels line up. The residual axis is left free, since its useful span differs
+by an order of magnitude between sites.
 
 ---
 

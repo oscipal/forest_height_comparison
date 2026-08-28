@@ -29,6 +29,7 @@ from bgt.viz import (
     _annotate,
     _save,
     _titleblock,
+    height_limits,
 )
 
 
@@ -56,6 +57,7 @@ def plot_scatter_grouped(
     prod_col: str = "fh",
     prod_label: str = "BIOMASS L2A forest height (m)",
     subtitle: str = "",
+    lims: tuple[float, float] | None = None,
 ) -> Path:
     """Pooled scatter coloured by group; the fits are on the pooled sample."""
     work = df[[ref_col, prod_col, group_col]].dropna()
@@ -63,9 +65,7 @@ def plot_scatter_grouped(
     m = compute_metrics(x, y)
     groups, colors = _groups_of(work, group_col)
 
-    lo, hi = float(min(x.min(), y.min())), float(max(x.max(), y.max()))
-    pad = 0.05 * (hi - lo)
-    lims = (lo - pad, hi + pad)
+    lims = lims or height_limits(x, y)
 
     fig, ax = plt.subplots(figsize=(6.8, 6.6), constrained_layout=True)
     for g in groups:
@@ -116,6 +116,7 @@ def plot_residuals_grouped(
     prod_col: str = "fh",
     bins: list[float] | None = None,
     subtitle: str = "",
+    lims: tuple[float, float] | None = None,
 ) -> Path:
     """Residual against reference height, with one binned mean line per group."""
     bins = bins or config.HEIGHT_BINS
@@ -140,6 +141,7 @@ def plot_residuals_grouped(
         ax.errorbar(centres, agg["mean"], yerr=agg["std"], color=colors[g], lw=2.0,
                     marker="o", ms=6, capsize=4, elinewidth=1.4, zorder=5,
                     markeredgecolor=SURFACE, markeredgewidth=1.2, label=g)
+    ax.set_xlim(lims or height_limits(work[ref_col].to_numpy()))
     ax.set_xlabel(ref_label)
     ax.set_ylabel("residual, BIOMASS - ALS (m)")
     ax.legend(loc="upper right", title="binned mean +/- 1 SD", alignment="left")

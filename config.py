@@ -279,3 +279,18 @@ HEIGHT_BINS = [0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100]
 
 #: Figure resolution.
 FIG_DPI = 200
+
+#: Rounding step, in metres, for the shared height axis of the scatter and
+#: residual figures.
+#:
+#: The range itself is taken from the data, but every figure belonging to the
+#: same comparison shares one range: all four scatter/residual plots of a scene
+#: use that scene's range, the pooled figures use the pooled range, and the
+#: ETH-grid figures use their site's. So BIOMASS-vs-ALS and ETH-vs-ALS for one
+#: scene can be laid side by side, while a sparse scene is still drawn at a
+#: scale that fits it.
+#:
+#: Limits are rounded outward to a multiple of this step (and never below 0 for
+#: non-negative data), which keeps the tick labels round and makes scenes of
+#: similar stature land on the same range anyway.
+SCATTER_LIMIT_STEP_M = 5.0

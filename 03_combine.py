@@ -29,6 +29,7 @@ from bgt import coreg, metrics, viz
 from bgt import viz_combined as vizc
 
 
+
 def load_paired(out_dir: Path, sites: list[str] | None = None) -> pd.DataFrame:
     """Concatenate every per-scene ``paired_cells.csv`` under ``out_dir``."""
     frames = []
@@ -151,14 +152,18 @@ def main(argv: list[str] | None = None) -> int:
     group_col = args.group_by
 
     print("\n  figures:")
+    # One height range for the pooled scatter and residual plots.
+    pooled_lims = viz.height_limits(paired[ref_col].to_numpy(),
+                                    paired["fh"].to_numpy())
     vizc.plot_scatter_grouped(paired, ref_col,
                               combined_dir / "fig02_scatter_combined.png",
                               ref_label=ref_label, group_col=group_col,
-                              subtitle=subtitle)
+                              subtitle=subtitle, lims=pooled_lims)
     vizc.plot_residuals_grouped(paired, ref_col,
                                 combined_dir / "fig03_residuals_combined.png",
                                 ref_label=ref_label, group_col=group_col,
-                                bins=config.HEIGHT_BINS, subtitle=subtitle)
+                                bins=config.HEIGHT_BINS, subtitle=subtitle,
+                                lims=pooled_lims)
     vizc.plot_distributions_grouped(paired, ref_col,
                                     combined_dir / "fig04_distributions_combined.png",
                                     ref_label=ref_label, group_col=group_col,

@@ -176,6 +176,9 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
     ref_label = f"ALS canopy height, {args.primary_stat} per cell (m)"
     prod_label = "ETH canopy height (m)"
 
+    site_lims = viz.height_limits(paired[ref_col].to_numpy(),
+                                  paired["eth"].to_numpy())
+
     viz.plot_maps(als_grid, eth_grid, extent, out_dir / "fig01_maps.png",
                   als_label=args.primary_stat, subtitle=subtitle,
                   prod_name="ETH canopy height 10 m", prod_short="ETH",
@@ -183,11 +186,11 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
     viz.plot_scatter(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
                      out_dir / "fig02_scatter.png", ref_label=ref_label,
                      prod_label=prod_label, subtitle=subtitle,
-                     prod_short="ETH")
+                     prod_short="ETH", lims=site_lims)
     viz.plot_residuals(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
                        out_dir / "fig03_residuals.png", ref_label=ref_label,
                        bins=config.HEIGHT_BINS, subtitle=subtitle,
-                       prod_short="ETH")
+                       prod_short="ETH", lims=site_lims)
     viz.plot_distributions(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
                            out_dir / "fig04_distributions.png",
                            ref_label=args.primary_stat, subtitle=subtitle,

@@ -350,14 +350,22 @@ def compare_product(
     )
     ref_label = f"ALS canopy height, {args.primary_stat} per cell (m)"
 
+    # One height range for every scatter and residual plot of this scene, so
+    # the BIOMASS and ETH panels can be read against each other directly.
+    scene_series = [paired[ref_col].to_numpy(), paired["fh"].to_numpy()]
+    if common is not None:
+        scene_series += [common[eth_ref_col].to_numpy(), common["fh"].to_numpy()]
+    scene_lims = viz.height_limits(*scene_series)
+
     viz.plot_maps(als_grid, fh_grid, extent, out_dir / "fig01_maps.png",
                   als_label=args.primary_stat, subtitle=subtitle)
     viz.plot_scatter(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
                      out_dir / "fig02_scatter.png", ref_label=ref_label,
-                     subtitle=subtitle)
+                     subtitle=subtitle, lims=scene_lims)
     viz.plot_residuals(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
                        out_dir / "fig03_residuals.png", ref_label=ref_label,
-                       bins=config.HEIGHT_BINS, subtitle=subtitle)
+                       bins=config.HEIGHT_BINS, subtitle=subtitle,
+                       lims=scene_lims)
     viz.plot_distributions(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
                            out_dir / "fig04_distributions.png",
                            ref_label=args.primary_stat, subtitle=subtitle)
@@ -378,12 +386,13 @@ def compare_product(
                          out_dir / "fig09_biomass_vs_eth.png",
                          ref_label=eth_label,
                          prod_label="BIOMASS L2A forest height (m)",
-                         subtitle=subtitle, prod_short="BIOMASS")
+                         subtitle=subtitle, prod_short="BIOMASS",
+                         lims=scene_lims)
         viz.plot_scatter(common[ref_col].to_numpy(),
                          common[eth_ref_col].to_numpy(),
                          out_dir / "fig10_eth_vs_als.png", ref_label=ref_label,
                          prod_label="ETH canopy height (m)", subtitle=subtitle,
-                         prod_short="ETH")
+                         prod_short="ETH", lims=scene_lims)
         eth_map = np.full(fh.shape, np.nan)
         eth_map[common["row"], common["col"]] = common[eth_ref_col]
         viz.plot_maps(als_grid, eth_map, extent, out_dir / "fig11_eth_maps.png",
