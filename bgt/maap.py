@@ -192,7 +192,7 @@ def download_asset(
     truncated raster that later steps would silently read.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists() and not overwrite:
+    if os.path.exists(config.long_path(dest)) and not overwrite:
         print(f"    exists, skipping: {dest.name}")
         return dest
 
@@ -206,7 +206,7 @@ def download_asset(
         r.raise_for_status()
         total = int(r.headers.get("Content-Length", 0))
         written = 0
-        with open(part, "wb") as fh:
+        with open(config.long_path(part), "wb") as fh:
             for chunk in r.iter_content(chunk_size=chunk_size):
                 if not chunk:
                     continue
@@ -222,7 +222,7 @@ def download_asset(
                     )
         print()
 
-    part.replace(dest)
+    os.replace(config.long_path(part), config.long_path(dest))
     return dest
 
 

@@ -5,6 +5,7 @@ scripts (``01_download_biomass.py`` and ``02_compare.py``) read their defaults
 from this module and expose them as command line overrides.
 """
 
+import os
 from pathlib import Path
 
 # --------------------------------------------------------------------------- #
@@ -279,6 +280,22 @@ HEIGHT_BINS = [0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100]
 
 #: Figure resolution.
 FIG_DPI = 200
+
+def long_path(path: Path | str) -> str:
+    """Absolute path string that Windows will accept at any length.
+
+    Windows refuses to create a file whose path exceeds 260 characters unless
+    it is given in the extended-length form. A BIOMASS item id is 79 characters
+    and its asset filenames 88, so the existing sites sit at 254-257 and a site
+    folder a few characters longer -- ``Ipassa_LAS_Cross`` -- crosses the limit
+    for reasons that have nothing to do with the data. Reading is unaffected
+    (GDAL handles long paths), so this is used where the pipeline writes.
+    """
+    text = os.fspath(Path(path).resolve())
+    if os.name == "nt" and not text.startswith("\\\\?\\"):
+        return "\\\\?\\" + text
+    return text
+
 
 def quality_suffix(quality_max: float | None) -> str:
     """Filename suffix naming the BIOMASS quality filter a run used.
