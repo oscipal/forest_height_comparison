@@ -150,12 +150,18 @@ def acquisition_label(als_dir: Path = config.ALS_DIR) -> tuple[str, str]:
     """
     summary = load_summary(als_dir)
     # Not every summary fills in the site name (Luki2025 leaves it blank), so
-    # fall back to the product folder, which always carries it.
-    site = (
-        summary.get("site")
-        or summary.get("dataset")
-        or Path(als_dir).name.replace("03_processed_", "")
-    )
+    # fall back to the product folder, which always carries it. A site flown
+    # twice writes the same name into both summaries (Ipassa), which would pool
+    # two overlapping scans into one sample, so there the folder label -- which
+    # carries the acquisition -- wins over the summary.
+    if not Path(als_dir).name.startswith("03_processed_"):
+        site = config.site_name(als_dir)
+    else:
+        site = (
+            summary.get("site")
+            or summary.get("dataset")
+            or Path(als_dir).name.replace("03_processed_", "")
+        )
     start, end = summary.get("mindt", ""), summary.get("maxdt", "")
     if start and end:
         dates = start if start == end else f"{start} to {end}"

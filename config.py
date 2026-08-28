@@ -24,13 +24,39 @@ def site_dirs(root: Path = ROOT) -> list[Path]:
     Sites are discovered rather than listed, so dropping a new
     ``03_processed_<site>`` folder into the repository is enough to include it
     in the next run.
+
+    A site that was flown more than once ships one subfolder per acquisition
+    (Ipassa: ``LAS_Cross`` and ``LAS_Simple``) rather than products at its top
+    level. Those subfolders are discovered as sites in their own right, since
+    each is a separate scan with its own outline, dates and pulse density and
+    has to be compared separately. A folder holding no CHM at any level is
+    reported and skipped, so an incomplete drop cannot halt a whole run.
     """
-    return sorted(p for p in root.glob(ALS_DIR_GLOB) if p.is_dir())
+    found: list[Path] = []
+    for site_dir in sorted(p for p in root.glob(ALS_DIR_GLOB) if p.is_dir()):
+        if (site_dir / ALS_CHM).is_file():
+            found.append(site_dir)
+            continue
+        subs = sorted(s for s in site_dir.iterdir()
+                      if s.is_dir() and (s / ALS_CHM).is_file())
+        if subs:
+            found.extend(subs)
+        else:
+            print(f"  skipping {site_dir.name}: no {ALS_CHM} in it or its "
+                  f"subfolders")
+    return found
 
 
 def site_name(als_dir: Path) -> str:
-    """Short site label derived from the folder name."""
-    return Path(als_dir).name.replace("03_processed_", "")
+    """Short site label derived from the folder name.
+
+    A per-acquisition subfolder is labelled ``<site>_<acquisition>``, e.g.
+    ``Ipassa_LAS_Cross``, so its outputs never collide with a sibling's.
+    """
+    path = Path(als_dir)
+    if path.name.startswith("03_processed_"):
+        return path.name.replace("03_processed_", "")
+    return f"{path.parent.name.replace('03_processed_', '')}_{path.name}"
 
 
 #: Default site, used only as a fallback for functions called without one.
