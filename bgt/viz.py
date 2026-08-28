@@ -611,6 +611,22 @@ def plot_mask_map(
     return _save(fig, out_path)
 
 
+def _rounded_range(lo: float, hi: float) -> tuple[float, float]:
+    """Widen ``(lo, hi)`` outward to round numbers, whatever the unit's scale.
+
+    Rounding to whole numbers is right for a quantity spanning tens -- decibels,
+    digital numbers -- and useless for one spanning a fraction of 1, where it
+    collapses every range to (0, 1). So the step is taken from the span itself.
+    """
+    span = hi - lo
+    if span >= 5.0:
+        return float(np.floor(lo)), float(np.ceil(hi))
+    if span <= 0.0:
+        return float(lo), float(lo + 1.0)
+    step = 10.0 ** np.floor(np.log10(span)) / 2.0
+    return float(np.floor(lo / step) * step), float(np.ceil(hi / step) * step)
+
+
 def plot_relation(
     x: np.ndarray,
     y: np.ndarray,
@@ -640,9 +656,9 @@ def plot_relation(
     # the y range than the whole population does, leaving the relation squashed
     # into a strip. The default range is robust, and the annotation says how
     # many cells fall outside it so nothing is dropped quietly.
-    y_lims = y_lims or (
-        float(np.floor(np.percentile(b, 100.0 * RELATION_Y_TAIL))),
-        float(np.ceil(np.percentile(b, 100.0 * (1.0 - RELATION_Y_TAIL)))),
+    y_lims = y_lims or _rounded_range(
+        float(np.percentile(b, 100.0 * RELATION_Y_TAIL)),
+        float(np.percentile(b, 100.0 * (1.0 - RELATION_Y_TAIL))),
     )
     off_scale = int(np.count_nonzero((b < y_lims[0]) | (b > y_lims[1])))
 
