@@ -8,3 +8,4 @@ pyproj>=3.6
 shapely>=2.0
 geopandas>=1.0
 requests>=2.31
+h5py>=3.10
