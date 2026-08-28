@@ -154,16 +154,17 @@ def tomographic_figure(grid: agbd.AgbdGrid, args: argparse.Namespace,
         "col": cols,
         "agbd_t_ha": grid.agbd[keep],
         "masked_fraction": grid.masked_fraction[keep],
-        "tomo_hv_dn": tomo[keep],
+        "tomo_hv": tomo[keep],
     })
 
     print(f"  {len(paired):,} cells with both AGBD and a tomographic value")
     viz.plot_relation(
         paired["agbd_t_ha"].to_numpy(),
-        paired["tomo_hv_dn"].to_numpy(),
+        paired["tomo_hv"].to_numpy(),
         out_dir / f"scatter_tomo_hv_{args.tomo_height}m.png",
         x_label="ALS above-ground biomass density (t/ha)",
-        y_label=f"normalised tomographic HV power at {args.tomo_height} m (DN)",
+        y_label=f"normalised tomographic HV power at {args.tomo_height} m"
+                f"\n (fraction of full scale)",
         title=f"Tomographic HV power at {args.tomo_height} m vs ALS biomass",
         subtitle=(
             f"{grid.path.name} band {config.AGBD_BAND_NAME} against "
@@ -295,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = [{"observable": f"tomographic HV at {args.tomo_height} m",
              **metrics.association(tomo_pairs["agbd_t_ha"],
-                                   tomo_pairs["tomo_hv_dn"])}]
+                                   tomo_pairs["tomo_hv"])}]
     if l1b_pairs is not None:
         rows.append({"observable": f"L1b {args.polarisation} {args.radiometry}",
                      **metrics.association(l1b_pairs["agbd_t_ha"],

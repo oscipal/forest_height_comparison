@@ -89,7 +89,10 @@ def tomo_heights() -> list[int]:
 
 
 def load_tomo(height_m: int, shape: tuple[int, int]) -> np.ndarray:
-    """Read the tomographic HV layer at ``height_m`` as float, nan where no data.
+    """Read the tomographic HV layer at ``height_m``, scaled to 0-1.
+
+    Values come back as a fraction of the 8-bit full scale
+    (``config.TOMO_FULL_SCALE_DN``), and ``nan`` where the layer has no data.
 
     ``shape`` is the AGBD grid the layer is paired on; a layer that does not
     match it cannot be paired by pixel index and is rejected rather than
@@ -113,4 +116,5 @@ def load_tomo(height_m: int, shape: tuple[int, int]) -> np.ndarray:
             layer[layer == src.nodata] = np.nan
     if config.TOMO_NODATA_DN is not None:
         layer[layer == config.TOMO_NODATA_DN] = np.nan
+    layer /= config.TOMO_FULL_SCALE_DN
     return layer

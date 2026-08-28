@@ -397,6 +397,12 @@ TOMO_TEMPLATE = "Tomo_hv_norm_{height}.tif"
 #: default.
 TOMO_HEIGHT_M = 30
 
+#: Full scale of the 8-bit tomographic layers. The layers are read as a
+#: fraction of it -- 255 DN is 1.0 -- so the figures carry a unit that means
+#: something on its own rather than a raw digital number whose ceiling the
+#: reader has to know.
+TOMO_FULL_SCALE_DN = 255.0
+
 #: The tomographic layers are 8-bit with no no-data value declared, and write a
 #: literal 0 outside the reconstructed area -- a wedge along one edge of the
 #: grid, identifiable because it is the same wedge at every height. Zero is
