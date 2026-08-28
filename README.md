@@ -19,9 +19,14 @@ pip install -r requirements.txt
 python 01_download_biomass.py --list-only          # search, no token needed
 python 01_download_biomass.py --token <offline-token>
 python 01b_download_eth.py                         # ETH 10 m product, no token
-python 02_compare.py                               # per-scene results
+python 02_compare.py                               # per-scene results  -> *_q2
 python 02b_compare_eth.py                          # ETH vs ALS on the ETH grid
-python 03_combine.py                               # pooled, all-scene results
+python 03_combine.py                               # pooled results     -> *_q2
+
+python 02_compare.py --quality-max 20               # looser filter     -> *_q20
+python 03_combine.py --suffix _q20
+python 02_compare.py --quality-max none             # no filter  -> *_allquality
+python 03_combine.py --suffix _allquality
 ```
 
 Per-scene results land in `outputs/<site>/<scene>/`, pooled results in
@@ -29,6 +34,15 @@ Per-scene results land in `outputs/<site>/<scene>/`, pooled results in
 `outputs_eth/<site>/`.
 
 Sites are **discovered, not configured**: every `03_processed_<site>` folder in
+**Every output is named after the quality filter that produced it** — `_q2` for
+the default cut, `_q20`, `_allquality` for no cut — so the three complete sets
+checked in here sit side by side in the same folders and no run can overwrite
+another's figures. `02_compare.py` derives the suffix from its own
+`--quality-max`; `03_combine.py` takes `--suffix` to choose which set to pool.
+`--suffix` overrides the default on either. See [Where the 2.0 quality threshold
+comes from](#where-the-20-quality-threshold-comes-from) for why the filtered set
+is the headline one.
+
 the repository is picked up automatically, so adding a fourth site means
 dropping in its folder and re-running. `--site <name>` restricts any step.
 
@@ -288,7 +302,7 @@ failing any one means the optimum is reported but **not** applied:
 
 `--force-shift` applies the optimum regardless; `--no-shift-search` skips the
 search entirely. Either way the offset found and the verdict are recorded in
-`outputs/summary_all_products.csv`.
+`outputs/summary_all_products_q2.csv`.
 
 ### Step 5 — Pairing
 
@@ -319,7 +333,7 @@ nominal geolocation. Five scenes returned an optimum that failed one of the
 checks above; on the sixth (Mbalmayo 2025-12-15) the eroded search set was empty,
 so the search never ran and that scene has no `fig06_shift_search.png`. The
 reason per scene is in the `shift_verdict` column of
-`outputs/summary_all_products.csv`.
+`outputs/summary_all_products_q2.csv`.
 
 ### Pooled over all sites and scenes
 
@@ -409,9 +423,9 @@ The tests are applied in the order of the columns and each cell is attributed to
 the **first** test it fails, so every row sums to the analysis window. Two
 further causes — an FH value outside 0–100 m, and no usable ALS aggregate
 despite sufficient coverage — are zero in every scene and are omitted here. The
-counts are `exclusion_counts.csv` per scene and
-`outputs/_combined/exclusion_counts_all.csv` pooled, drawn as
-`fig12_exclusions.png` and, cell by cell in space, `fig13_mask_map.png`.
+counts are `exclusion_counts_q2.csv` per scene and
+`outputs/_combined/exclusion_counts_all_q2.csv` pooled, drawn as
+`fig12_exclusions_q2.png` and, cell by cell in space, `fig13_mask_map_q2.png`.
 
 The first column of rejections is geometry, not data loss: the analysis window
 is the rectangle around the footprint, and the flight polygon inside it rarely
@@ -722,7 +736,7 @@ docs/pipeline_slide.*      a simplified six-step diagram, for slides
 data/biomass/<site>/       downloaded BIOMASS products -- gitignored, fetched by step 1
 outputs/<site>/<scene>/    per-scene figures and tables
 outputs/_combined/         pooled figures and tables
-outputs/summary_all_products.csv   one row per scene: metrics and shift verdict
+outputs/summary_all_products_q2.csv  one row per scene, per run suffix
 outputs_eth/<site>/        ETH-vs-ALS results on the ETH grid
 outputs_eth/summary_eth_by_site.csv  one row per site, ETH on its own grid
 data/eth/<site>/           clipped ETH product -- gitignored, fetched by step 1b
@@ -778,6 +792,10 @@ The code in this repository is released under the MIT License; see
 [`LICENSE`](LICENSE). This covers the code only. The ALS products it reads are
 closed-access third-party data and are not redistributed here, and the BIOMASS
 products carry ESA's own terms.
+
+**Every filename below carries the run suffix** — `fig02_scatter_q2.png` for the
+headline `q ≤ 2` run, `_q20` and `_allquality` for the other two. The names are
+written here without it for readability.
 
 ## References
 

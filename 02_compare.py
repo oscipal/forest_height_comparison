@@ -44,6 +44,19 @@ from bgt import eth as eth_mod
 # --------------------------------------------------------------------------- #
 
 
+def _suffixed(out_dir: Path, suffix: str):
+    """Return a namer that inserts ``suffix`` before each output's extension.
+
+    A suffixed run writes a complete parallel set of figures and tables into the
+    same folders, so a variant of the comparison (a different quality filter,
+    say) can sit next to the default one instead of overwriting it.
+    """
+    def name(filename: str) -> Path:
+        stem, dot, ext = filename.partition(".")
+        return out_dir / f"{stem}{suffix}{dot}{ext}"
+    return name
+
+
 def _sensing_dates(item_id: str) -> tuple[str, str]:
     """``(ISO start date, human-readable sensing window)`` from a product name.
 
@@ -253,6 +266,7 @@ def compare_product(
     # Metrics
     # ------------------------------------------------------------------ #
     out_dir = args.out_dir / site / item_id
+    out = _suffixed(out_dir, args.suffix)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     ref_col = f"als_{args.primary_stat}"
@@ -269,11 +283,11 @@ def compare_product(
     bin_table = metrics.binned_metrics(paired, ref_col)
     qual_table = metrics.quality_metrics(paired, ref_col)
 
-    paired.to_csv(out_dir / "paired_cells.csv", index=False)
-    stat_table.to_csv(out_dir / "metrics_by_als_stat.csv", index=False)
-    bin_table.to_csv(out_dir / "metrics_by_height_bin.csv", index=False)
+    paired.to_csv(out("paired_cells.csv"), index=False)
+    stat_table.to_csv(out("metrics_by_als_stat.csv"), index=False)
+    bin_table.to_csv(out("metrics_by_height_bin.csv"), index=False)
     if not qual_table.empty:
-        qual_table.to_csv(out_dir / "metrics_by_quality_class.csv", index=False)
+        qual_table.to_csv(out("metrics_by_quality_class.csv"), index=False)
 
     if chm_secondary is not None:
         sec = metrics.compute_metrics(
@@ -281,7 +295,7 @@ def compare_product(
         )
         pd.DataFrame(
             [{"chm": args.chm, **headline}, {"chm": args.chm_secondary, **sec}]
-        ).to_csv(out_dir / "metrics_by_chm_product.csv", index=False)
+        ).to_csv(out("metrics_by_chm_product.csv"), index=False)
 
     # ------------------------------------------------------------------ #
     # Three-way comparison on the BIOMASS grid
@@ -314,7 +328,7 @@ def compare_product(
                 rows.append({"comparison": name, "reference": ref,
                              "product": prod, **m})
             three_way = pd.DataFrame(rows)
-            three_way.to_csv(out_dir / "metrics_three_way.csv", index=False)
+            three_way.to_csv(out("metrics_three_way.csv"), index=False)
             print(three_way[["comparison", "n", "bias", "mae", "rmse",
                              "pearson_r"]]
                   .to_string(index=False, float_format=lambda v: f"{v:.3f}"))
@@ -357,57 +371,57 @@ def compare_product(
         scene_series += [common[eth_ref_col].to_numpy(), common["fh"].to_numpy()]
     scene_lims = viz.height_limits(*scene_series)
 
-    viz.plot_maps(als_grid, fh_grid, extent, out_dir / "fig01_maps.png",
+    viz.plot_maps(als_grid, fh_grid, extent, out("fig01_maps.png"),
                   als_label=args.primary_stat, subtitle=subtitle)
     viz.plot_scatter(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
-                     out_dir / "fig02_scatter.png", ref_label=ref_label,
+                     out("fig02_scatter.png"), ref_label=ref_label,
                      subtitle=subtitle, lims=scene_lims)
     viz.plot_residuals(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
-                       out_dir / "fig03_residuals.png", ref_label=ref_label,
+                       out("fig03_residuals.png"), ref_label=ref_label,
                        bins=config.HEIGHT_BINS, subtitle=subtitle,
                        lims=scene_lims)
     viz.plot_distributions(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
-                           out_dir / "fig04_distributions.png",
+                           out("fig04_distributions.png"),
                            ref_label=args.primary_stat, subtitle=subtitle)
     viz.plot_bland_altman(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
-                          out_dir / "fig05_bland_altman.png", subtitle=subtitle)
+                          out("fig05_bland_altman.png"), subtitle=subtitle)
     if shift is not None:
-        viz.plot_shift_surface(shift, out_dir / "fig06_shift_search.png",
+        viz.plot_shift_surface(shift, out("fig06_shift_search.png"),
                                subtitle=subtitle)
-    viz.plot_stat_comparison(stat_table, out_dir / "fig07_als_statistic.png",
+    viz.plot_stat_comparison(stat_table, out("fig07_als_statistic.png"),
                              subtitle=subtitle)
     if not qual_table.empty:
-        viz.plot_quality_strata(qual_table, out_dir / "fig08_quality_classes.png",
+        viz.plot_quality_strata(qual_table, out("fig08_quality_classes.png"),
                                 subtitle=subtitle)
 
     if common is not None:
         eth_label = f"ETH canopy height, {args.primary_stat} per cell (m)"
         viz.plot_scatter(common[eth_ref_col].to_numpy(), common["fh"].to_numpy(),
-                         out_dir / "fig09_biomass_vs_eth.png",
+                         out("fig09_biomass_vs_eth.png"),
                          ref_label=eth_label,
                          prod_label="BIOMASS L2A forest height (m)",
                          subtitle=subtitle, prod_short="BIOMASS",
                          lims=scene_lims)
         viz.plot_scatter(common[ref_col].to_numpy(),
                          common[eth_ref_col].to_numpy(),
-                         out_dir / "fig10_eth_vs_als.png", ref_label=ref_label,
+                         out("fig10_eth_vs_als.png"), ref_label=ref_label,
                          prod_label="ETH canopy height (m)", subtitle=subtitle,
                          prod_short="ETH", lims=scene_lims)
         eth_map = np.full(fh.shape, np.nan)
         eth_map[common["row"], common["col"]] = common[eth_ref_col]
-        viz.plot_maps(als_grid, eth_map, extent, out_dir / "fig11_eth_maps.png",
+        viz.plot_maps(als_grid, eth_map, extent, out("fig11_eth_maps.png"),
                       als_label=args.primary_stat, subtitle=subtitle,
                       prod_name="ETH canopy height (aggregated)",
                       prod_short="ETH", grid_name="BIOMASS")
 
     viz.plot_exclusions(drop_counts, coreg.EXCLUSION_LABELS_BY_KEY,
-                        out_dir / "fig12_exclusions.png", subtitle=subtitle)
+                        out("fig12_exclusions.png"), subtitle=subtitle)
     viz.plot_mask_map(reason_grid, drop_counts, coreg.EXCLUSION_LABELS_BY_KEY,
                       coreg.EXCLUSION_KEYS, extent,
-                      out_dir / "fig13_mask_map.png", subtitle=subtitle)
+                      out("fig13_mask_map.png"), subtitle=subtitle)
     pd.DataFrame([{"site": site, "scene": item_id, "biomass_date": date,
                    "cells_in_window": in_window, **drop_counts}]).to_csv(
-        out_dir / "exclusion_counts.csv", index=False)
+        out("exclusion_counts.csv"), index=False)
 
     return {
         "site": site_label,
@@ -482,9 +496,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="where the ETH clips are (default: %(default)s)")
     p.add_argument("--no-eth", action="store_true",
                    help="skip the ETH global canopy height comparison")
+    p.add_argument("--suffix", default=None,
+                   help="append this to every output filename; default: named "
+                        "after the quality filter (_q2, _q20, _allquality), so "
+                        "a run never overwrites another run's outputs")
     p.add_argument("--strict-mask", action="store_true",
                    help="additionally apply mask_pd04 and mask_steep to the ALS CHM")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.suffix is None:
+        args.suffix = config.quality_suffix(args.quality_max)
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -538,7 +559,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     combined = pd.DataFrame(summaries)
-    combined.to_csv(args.out_dir / "summary_all_products.csv", index=False)
+    combined.to_csv(_suffixed(args.out_dir, args.suffix)("summary_all_products.csv"),
+                    index=False)
 
     print("\n" + "=" * 72)
     print("Summary across all sites and scenes")

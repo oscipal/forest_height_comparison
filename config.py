@@ -280,6 +280,21 @@ HEIGHT_BINS = [0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100]
 #: Figure resolution.
 FIG_DPI = 200
 
+def quality_suffix(quality_max: float | None) -> str:
+    """Filename suffix naming the BIOMASS quality filter a run used.
+
+    Every run writes its outputs under a suffix derived from its own filter, so
+    the three sets checked in here -- ``_q2`` (the default), ``_q20`` and
+    ``_allquality`` -- sit side by side in the same folders and no run can
+    silently overwrite another's figures. ``--suffix`` overrides it.
+    """
+    if quality_max is None:
+        return "_allquality"
+    if float(quality_max).is_integer():
+        return f"_q{int(quality_max)}"
+    return "_q" + f"{quality_max:g}".replace(".", "p")
+
+
 #: Rounding step, in metres, for the shared height axis of the scatter and
 #: residual figures.
 #:

@@ -13,6 +13,11 @@ Per-scene figures are written to `outputs/<site>/<scene>/` by `02_compare.py`
 
 ## 1. Conventions shared by every figure
 
+**Filenames.** Every file named in this document carries a run suffix on disk:
+`_q2` for the headline run, `_q20` and `_allquality` for the two looser quality
+filters — so `fig01_maps.png` is `fig01_maps_q2.png` in `outputs/`. The suffix is
+left off below for readability; section 15 describes the three runs.
+
 ### Provenance caption
 
 Every figure carries a two-line caption in muted text at the bottom left,
@@ -220,7 +225,7 @@ applied. The first that fails blocks the shift:
 | correlation gain at least `--shift-min-gain` (default 0.05) | a shift that buys nothing |
 
 `--force-shift` applies the optimum regardless. Either way the offset that was
-found is recorded in `summary_all_products.csv`, alongside the verdict.
+found is recorded in `summary_all_products_q2.csv`, alongside the verdict.
 
 ---
 
@@ -429,3 +434,33 @@ Pooled, in `outputs/_combined/`:
 | `exclusion_counts_all.csv` | figure 11 of the pooled set -- one row per scene, absolute counts |
 
 Metric definitions are in `bgt/metrics.py`.
+
+---
+
+## 15. The three runs (`_q2`, `_q20`, `_allquality`)
+
+Every figure and table above exists three times, in the same folders,
+distinguished by a suffix inserted before the extension that names the BIOMASS
+quality filter the run used. Filenames carry no unsuffixed form — a figure
+always says which filter produced it:
+
+| Suffix | Run | BIOMASS quality filter |
+|---|---|---|
+| `_q2` | `02_compare.py` | `q ≤ 2` — the headline results |
+| `_q20` | `02_compare.py --quality-max 20` | `q ≤ 20` |
+| `_allquality` | `02_compare.py --quality-max none` | none |
+
+So `fig02_scatter_q2.png`, `fig02_scatter_q20.png` and
+`fig02_scatter_allquality.png` sit side by side, as do their metric tables,
+`paired_cells_*.csv`, `exclusion_counts_*.csv` and the pooled
+`outputs/_combined/*` files. The suffix is derived from `--quality-max`, so a
+run cannot overwrite another run's outputs; `03_combine.py --suffix <s>` pools
+the matching per-scene tables, so a pooled figure never mixes two runs.
+
+Everything else about the three runs is identical — same co-registration, same
+coverage rule, same ALS statistic — and no shift was applied in any of them, so
+a difference between two of these figures is the quality filter and nothing
+else. Read them together: the default set is the headline result, and the two
+looser sets are what says whether the filter is doing real work. The axis range
+is computed per run, so a variant's scatter may be drawn on a wider range than
+its default counterpart.

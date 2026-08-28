@@ -30,10 +30,23 @@ from bgt import viz_combined as vizc
 
 
 
-def load_paired(out_dir: Path, sites: list[str] | None = None) -> pd.DataFrame:
-    """Concatenate every per-scene ``paired_cells.csv`` under ``out_dir``."""
+def _suffixed(out_dir: Path, suffix: str):
+    """Return a namer that inserts ``suffix`` before each output's extension."""
+    def name(filename: str) -> Path:
+        stem, dot, ext = filename.partition(".")
+        return out_dir / f"{stem}{suffix}{dot}{ext}"
+    return name
+
+
+def load_paired(out_dir: Path, sites: list[str] | None = None,
+                suffix: str = "") -> pd.DataFrame:
+    """Concatenate every per-scene ``paired_cells<suffix>.csv`` under ``out_dir``.
+
+    The suffix selects which run to pool: the default one, or a variant written
+    alongside it by ``02_compare.py --suffix``.
+    """
     frames = []
-    for path in sorted(out_dir.rglob("paired_cells.csv")):
+    for path in sorted(out_dir.rglob(f"paired_cells{suffix}.csv")):
         if config.COMBINED_DIR_NAME in path.parts:
             continue
         frame = pd.read_csv(path)
@@ -59,18 +72,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--primary-stat", default=config.PRIMARY_ALS_STAT,
                    choices=config.ALS_STATS,
                    help="ALS aggregate used for the headline results")
+    p.add_argument("--suffix", default=None,
+                   help="pool paired_cells<suffix>.csv and write the pooled "
+                        "outputs under the same suffix; default: named after "
+                        "config.FH_QUALITY_MAX (see 02_compare.py)")
     p.add_argument("--group-by", default="site", choices=["site", "scene"],
                    help="what the identity colour encodes (default: %(default)s)")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.suffix is None:
+        args.suffix = config.quality_suffix(config.FH_QUALITY_MAX)
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     viz.use_style()
 
-    paired = load_paired(args.out_dir, args.site)
+    paired = load_paired(args.out_dir, args.site, args.suffix)
     if paired.empty:
-        print(f"No paired_cells.csv found under {args.out_dir}.")
+        print(f"No paired_cells{args.suffix}.csv found under {args.out_dir}.")
         print("Run 02_compare.py first.")
         return 1
 
@@ -88,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
 
     combined_dir = args.out_dir / config.COMBINED_DIR_NAME
     combined_dir.mkdir(parents=True, exist_ok=True)
+    out = _suffixed(combined_dir, args.suffix)
 
     # ------------------------------------------------------------------ #
     # Tables
@@ -126,14 +147,14 @@ def main(argv: list[str] | None = None) -> int:
 
     pd.DataFrame([{"scope": "all sites pooled", "n_sites": len(sites),
                    "n_scenes": len(scenes), **pooled}]).to_csv(
-        combined_dir / "metrics_pooled.csv", index=False)
-    per_scene.to_csv(combined_dir / "metrics_by_scene.csv", index=False)
-    per_site.to_csv(combined_dir / "metrics_by_site.csv", index=False)
-    stat_table.to_csv(combined_dir / "metrics_by_als_stat.csv", index=False)
-    bin_table.to_csv(combined_dir / "metrics_by_height_bin.csv", index=False)
+        out("metrics_pooled.csv"), index=False)
+    per_scene.to_csv(out("metrics_by_scene.csv"), index=False)
+    per_site.to_csv(out("metrics_by_site.csv"), index=False)
+    stat_table.to_csv(out("metrics_by_als_stat.csv"), index=False)
+    bin_table.to_csv(out("metrics_by_height_bin.csv"), index=False)
     if not qual_table.empty:
-        qual_table.to_csv(combined_dir / "metrics_by_quality_class.csv", index=False)
-    paired.to_csv(combined_dir / "paired_cells_all.csv", index=False)
+        qual_table.to_csv(out("metrics_by_quality_class.csv"), index=False)
+    paired.to_csv(out("paired_cells_all.csv"), index=False)
 
     # ------------------------------------------------------------------ #
     # Figures
@@ -156,33 +177,33 @@ def main(argv: list[str] | None = None) -> int:
     pooled_lims = viz.height_limits(paired[ref_col].to_numpy(),
                                     paired["fh"].to_numpy())
     vizc.plot_scatter_grouped(paired, ref_col,
-                              combined_dir / "fig02_scatter_combined.png",
+                              out("fig02_scatter_combined.png"),
                               ref_label=ref_label, group_col=group_col,
                               subtitle=subtitle, lims=pooled_lims)
     vizc.plot_residuals_grouped(paired, ref_col,
-                                combined_dir / "fig03_residuals_combined.png",
+                                out("fig03_residuals_combined.png"),
                                 ref_label=ref_label, group_col=group_col,
                                 bins=config.HEIGHT_BINS, subtitle=subtitle,
                                 lims=pooled_lims)
     vizc.plot_distributions_grouped(paired, ref_col,
-                                    combined_dir / "fig04_distributions_combined.png",
+                                    out("fig04_distributions_combined.png"),
                                     ref_label=ref_label, group_col=group_col,
                                     subtitle=subtitle)
     vizc.plot_bland_altman_grouped(paired, ref_col,
-                                   combined_dir / "fig05_bland_altman_combined.png",
+                                   out("fig05_bland_altman_combined.png"),
                                    group_col=group_col, subtitle=subtitle)
     viz.plot_stat_comparison(stat_table,
-                             combined_dir / "fig07_als_statistic_combined.png",
+                             out("fig07_als_statistic_combined.png"),
                              subtitle=subtitle)
     if not qual_table.empty:
         viz.plot_quality_strata(qual_table,
-                                combined_dir / "fig08_quality_classes_combined.png",
+                                out("fig08_quality_classes_combined.png"),
                                 subtitle=subtitle)
-    vizc.plot_scene_metrics(per_scene, combined_dir / "fig09_per_scene.png",
+    vizc.plot_scene_metrics(per_scene, out("fig09_per_scene.png"),
                             subtitle=subtitle)
     # Exclusion accounting, gathered from the per-scene CSVs written by step 2.
     drop_rows = []
-    for path in sorted(args.out_dir.rglob("exclusion_counts.csv")):
+    for path in sorted(args.out_dir.rglob(f"exclusion_counts{args.suffix}.csv")):
         if config.COMBINED_DIR_NAME in path.parts:
             continue
         row = pd.read_csv(path)
@@ -192,13 +213,13 @@ def main(argv: list[str] | None = None) -> int:
     if drop_rows:
         drops = pd.concat(drop_rows, ignore_index=True)
         drops["scene_label"] = drops["site"] + "  " + drops["biomass_date"].astype(str)
-        drops.to_csv(combined_dir / "exclusion_counts_all.csv", index=False)
+        drops.to_csv(out("exclusion_counts_all.csv"), index=False)
         vizc.plot_exclusions_by_scene(
             drops, coreg.EXCLUSION_LABELS_BY_KEY, viz.EXCLUSION_COLORS,
-            combined_dir / "fig11_exclusions_by_scene.png", subtitle=subtitle,
+            out("fig11_exclusions_by_scene.png"), subtitle=subtitle,
         )
 
-    vizc.plot_site_metrics(per_site, combined_dir / "fig10_per_site.png",
+    vizc.plot_site_metrics(per_site, out("fig10_per_site.png"),
                            subtitle=subtitle)
 
     print("\n" + "=" * 72)
