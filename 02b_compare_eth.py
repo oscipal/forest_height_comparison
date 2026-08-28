@@ -33,8 +33,73 @@ import rasterio
 
 import config
 from bgt import als as als_mod
-from bgt import coreg, metrics, viz
+from bgt import coreg, metrics, replot as replot_mod, viz
 from bgt import eth as eth_mod
+
+
+def replot_site(als_dir: Path, args: argparse.Namespace) -> bool:
+    """Redraw one site's ETH-grid figures from ``paired_cells_eth.csv``.
+
+    The aggregation onto the 10 m grid is the slow part of this step and its
+    result is exactly what that table holds, so a change to how the figures look
+    does not need it repeated.
+    """
+    site = config.site_name(als_dir)
+    out_dir = args.out_dir / site
+    paired_path = out_dir / "paired_cells_eth.csv"
+    if not paired_path.is_file():
+        return False
+
+    paired = pd.read_csv(paired_path)
+    if paired.empty:
+        return False
+
+    site_label, als_dates = als_mod.acquisition_label(als_dir)
+    subtitle = (
+        f"Site: {site_label}   |   ALS: {args.chm} ({args.primary_stat} per cell), "
+        f"acquired {als_dates}\n"
+        f"ETH global canopy height 10 m (Lang et al. 2023), epoch 2020"
+    )
+    ref_label = f"ALS canopy height, {args.primary_stat} per cell (m)"
+    prod_label = "ETH canopy height (m)"
+    ref_col = f"als_{args.primary_stat}"
+
+    print(f"\n--- {site} ---")
+    print(f"  redrawing from {paired_path.name} ({len(paired):,} paired cells)")
+
+    lims = viz.height_limits(paired[ref_col].to_numpy(), paired["eth"].to_numpy())
+
+    try:
+        shape, extent = replot_mod.window_from_pairs(paired)
+        als_grid = replot_mod.grid_from_pairs(paired, ref_col, shape)
+        eth_grid = replot_mod.grid_from_pairs(paired, "eth", shape)
+        viz.plot_maps(als_grid, eth_grid, extent, out_dir / "fig01_maps.png",
+                      als_label=args.primary_stat, subtitle=subtitle,
+                      prod_name="ETH canopy height 10 m", prod_short="ETH",
+                      grid_name="ETH 10 m")
+    except ValueError as exc:
+        print(f"  maps skipped: {exc}")
+
+    viz.plot_scatter(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
+                     out_dir / "fig02_scatter.png", ref_label=ref_label,
+                     prod_label=prod_label, subtitle=subtitle,
+                     prod_short="ETH", lims=lims)
+    viz.plot_residuals(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
+                       out_dir / "fig03_residuals.png", ref_label=ref_label,
+                       bins=config.HEIGHT_BINS, subtitle=subtitle,
+                       prod_short="ETH", lims=lims)
+    viz.plot_distributions(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
+                           out_dir / "fig04_distributions.png",
+                           ref_label=args.primary_stat, subtitle=subtitle,
+                           prod_short="ETH", prod_name="ETH canopy height")
+    viz.plot_bland_altman(paired[ref_col].to_numpy(), paired["eth"].to_numpy(),
+                          out_dir / "fig05_bland_altman.png", subtitle=subtitle,
+                          prod_short="ETH")
+    stat_table = replot_mod.read_table(out_dir / "metrics_by_als_stat.csv")
+    if not stat_table.empty:
+        viz.plot_stat_comparison(stat_table, out_dir / "fig07_als_statistic.png",
+                                 subtitle=subtitle, prod_short="ETH")
+    return True
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -52,6 +117,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--fine-cell", type=float, default=config.FINE_CELL_M,
                    help="target fine cell size in metres (default: %(default)s)")
     p.add_argument("--min-coverage", type=float, default=config.MIN_ALS_COVERAGE)
+    p.add_argument("--replot", action="store_true",
+                   help="redraw the figures from paired_cells_eth.csv without "
+                        "recomputing the aggregation")
     p.add_argument("--shift-search", type=float, default=0.0,
                    help="planimetric shift search radius in metres. Off by "
                         "default: Sentinel-2 geolocation is good to well under "
@@ -223,6 +291,14 @@ def main(argv: list[str] | None = None) -> int:
     if not site_dirs:
         print("No 03_processed_* site folders found.")
         return 1
+
+    if args.replot:
+        redrawn = sum(replot_site(d, args) for d in site_dirs)
+        if not redrawn:
+            print(f"Nothing to redraw under {args.out_dir}; run the step first.")
+            return 1
+        print(f"\nRedrew {redrawn} site(s)")
+        return 0
 
     rows = [r for r in (compare_site(d, args) for d in site_dirs) if r]
     if not rows:

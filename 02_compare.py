@@ -35,7 +35,7 @@ import rasterio
 
 import config
 from bgt import als as als_mod
-from bgt import coreg, metrics, viz
+from bgt import coreg, metrics, replot as replot_mod, viz
 from bgt import eth as eth_mod
 
 
@@ -459,6 +459,129 @@ def _float_or_none(value: str) -> float | None:
     return float(value)
 
 
+def replot_scene(scene_dir: Path, als_dir: Path, args: argparse.Namespace) -> bool:
+    """Redraw one scene's figures from the tables an earlier run left behind.
+
+    Nothing is recomputed: every number comes back from ``paired_cells`` and the
+    metric tables beside it, so this is the fast path for a change that only
+    affects how a figure is drawn. Returns False when the scene has no table for
+    this run's suffix.
+    """
+    out = _suffixed(scene_dir, args.suffix)
+    paired_path = out("paired_cells.csv")
+    if not paired_path.is_file():
+        return False
+
+    paired = pd.read_csv(paired_path)
+    if paired.empty:
+        return False
+
+    item_id = scene_dir.name
+    date, sensed = _sensing_dates(item_id)
+    site_label, als_dates = als_mod.acquisition_label(als_dir)
+    subtitle = (
+        f"Site: {site_label}   |   ALS: {args.chm} ({args.primary_stat} per cell), "
+        f"acquired {als_dates}\n"
+        f"BIOMASS scene: {item_id}   |   {config.BIOMASS_PRODUCT_TYPE}, {sensed}"
+    )
+    ref_label = f"ALS canopy height, {args.primary_stat} per cell (m)"
+    ref_col = f"als_{args.primary_stat}"
+    eth_ref_col = f"eth_{args.primary_stat}"
+
+    print(f"\n--- {item_id} ---")
+    print(f"  redrawing from {paired_path.name} ({len(paired):,} paired cells)")
+
+    common = None
+    if eth_ref_col in paired.columns:
+        keep = paired[eth_ref_col].notna()
+        if "eth_coverage" in paired.columns:
+            keep &= paired["eth_coverage"] >= args.min_coverage
+        common = paired[keep] if keep.any() else None
+
+    lims = viz.height_limits(paired[ref_col].to_numpy(), paired["fh"].to_numpy())
+
+    viz.plot_scatter(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
+                     out("fig02_scatter.png"), ref_label=ref_label,
+                     subtitle=subtitle, lims=lims)
+    viz.plot_residuals(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
+                       out("fig03_residuals.png"), ref_label=ref_label,
+                       bins=config.HEIGHT_BINS, subtitle=subtitle, lims=lims)
+    viz.plot_distributions(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
+                           out("fig04_distributions.png"),
+                           ref_label=args.primary_stat, subtitle=subtitle)
+    viz.plot_bland_altman(paired[ref_col].to_numpy(), paired["fh"].to_numpy(),
+                          out("fig05_bland_altman.png"), subtitle=subtitle)
+
+    stat_table = replot_mod.read_table(out("metrics_by_als_stat.csv"))
+    if not stat_table.empty:
+        viz.plot_stat_comparison(stat_table, out("fig07_als_statistic.png"),
+                                 subtitle=subtitle)
+    qual_table = replot_mod.read_table(out("metrics_by_quality_class.csv"))
+    if not qual_table.empty:
+        viz.plot_quality_strata(qual_table, out("fig08_quality_classes.png"),
+                                subtitle=subtitle)
+
+    try:
+        shape, extent = replot_mod.window_from_pairs(paired)
+    except ValueError as exc:
+        shape, extent = None, None
+        print(f"  maps skipped: {exc}")
+
+    if shape is not None:
+        als_grid = replot_mod.grid_from_pairs(paired, ref_col, shape)
+        fh_grid = replot_mod.grid_from_pairs(paired, "fh", shape)
+        viz.plot_maps(als_grid, fh_grid, extent, out("fig01_maps.png"),
+                      als_label=args.primary_stat, subtitle=subtitle)
+
+    if common is not None:
+        eth_label = f"ETH canopy height, {args.primary_stat} per cell (m)"
+        viz.plot_scatter(common[eth_ref_col].to_numpy(), common["fh"].to_numpy(),
+                         out("fig09_biomass_vs_eth.png"), ref_label=eth_label,
+                         prod_label="BIOMASS L2A forest height (m)",
+                         subtitle=subtitle, prod_short="BIOMASS", lims=lims)
+        viz.plot_scatter(common[ref_col].to_numpy(), common[eth_ref_col].to_numpy(),
+                         out("fig10_eth_vs_als.png"), ref_label=ref_label,
+                         prod_label="ETH canopy height (m)", subtitle=subtitle,
+                         prod_short="ETH", lims=lims)
+        if shape is not None:
+            eth_grid = replot_mod.grid_from_pairs(common, eth_ref_col, shape)
+            viz.plot_maps(als_grid, eth_grid, extent, out("fig11_eth_maps.png"),
+                          als_label=args.primary_stat, subtitle=subtitle,
+                          prod_name="ETH canopy height (aggregated)",
+                          prod_short="ETH", grid_name="BIOMASS")
+
+    drops = replot_mod.exclusion_counts(out("exclusion_counts.csv"))
+    if drops:
+        viz.plot_exclusions(drops, coreg.EXCLUSION_LABELS_BY_KEY,
+                            out("fig12_exclusions.png"), subtitle=subtitle)
+    return True
+
+
+def replot_all(args: argparse.Namespace, site_dirs: list[Path]) -> int:
+    """Redraw every scene that already has results for this run's suffix."""
+    print("Redrawing from the existing tables; nothing is recomputed.")
+    print("fig06 (shift surface) and fig13 (mask map) need a full run and are "
+          "left untouched.")
+    redrawn = 0
+    for als_dir in site_dirs:
+        site = config.site_name(als_dir)
+        site_out = args.out_dir / site
+        if not site_out.is_dir():
+            continue
+        print()
+        print("=" * 72)
+        print(site)
+        print("=" * 72)
+        for scene_dir in sorted(p for p in site_out.iterdir() if p.is_dir()):
+            redrawn += replot_scene(scene_dir, als_dir, args)
+    if not redrawn:
+        print(f"\nNothing to redraw under {args.out_dir} for suffix "
+              f"'{args.suffix}'. Run the comparison first.")
+        return 1
+    print(f"\nRedrew {redrawn} scene(s)  ({datetime.now():%Y-%m-%d %H:%M})")
+    return 0
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -496,6 +619,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="where the ETH clips are (default: %(default)s)")
     p.add_argument("--no-eth", action="store_true",
                    help="skip the ETH global canopy height comparison")
+    p.add_argument("--replot", action="store_true",
+                   help="redraw the figures from the tables of an earlier run "
+                        "with the same settings, without recomputing anything")
     p.add_argument("--suffix", default=None,
                    help="append this to every output filename; default: named "
                         "after the quality filter (_q2, _q20, _allquality), so "
@@ -522,6 +648,9 @@ def main(argv: list[str] | None = None) -> int:
         available = [config.site_name(d) for d in config.site_dirs()]
         print(f"No site folder matches {args.site}. Available: {available}")
         return 1
+
+    if args.replot:
+        return replot_all(args, site_dirs)
 
     extra = config.ALS_MASK_EXTRA + (["mask_pd04.tif", "mask_steep.tif"]
                                      if args.strict_mask else [])

@@ -25,6 +25,8 @@ python 02b_compare_eth.py                          # ETH vs ALS on the ETH grid
 python 03_combine.py --site Loundoungou --site Luki2025 \
     --site Mbalmayo --site Ipassa_LAS_Cross        # pooled results  -> *_q2
 
+python 02_compare.py --replot                       # redraw only, seconds
+
 python 02_compare.py --quality-max 20               # looser filter     -> *_q20
 python 03_combine.py --suffix _q20 <same --site list>
 python 02_compare.py --quality-max none             # no filter  -> *_allquality
@@ -877,6 +879,7 @@ config.py                  every tunable setting, with the rationale
 02_compare.py              co-registration, statistics, figures, per scene
 02b_compare_eth.py         ETH vs ALS on the ETH grid, per site
 03_combine.py              pooled statistics and figures across all scenes
+bgt/replot.py              rebuilding figures from a finished run's tables
 bgt/maap.py                token exchange, STAC search, streaming download
 bgt/als.py                 ALS CHM loading, masking and site metadata
 bgt/eth.py                 ETH canopy height loading
