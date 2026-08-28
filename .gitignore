@@ -1,8 +1,6 @@
 .maap_token
 __pycache__/
 .claude/
-03_processed_Loundoungou/
-03_processed_Luki2025/
-03_processed_Mbalmayo/
+03_processed_*/
 /data
 outputs_eth/*/paired_cells_eth.csv
