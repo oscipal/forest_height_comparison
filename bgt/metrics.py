@@ -210,3 +210,72 @@ def format_summary(m: dict[str, float], ref_label: str, prod_label: str) -> str:
             f"  95 % LoA       [{m['loa_lower']:+.2f}, {m['loa_upper']:+.2f}] m",
         ]
     )
+
+
+def association(x: np.ndarray, y: np.ndarray) -> dict[str, float]:
+    """Strength and shape of the relation between two quantities.
+
+    Unlike :func:`compute_metrics` this makes no assumption that the two sides
+    share a unit, so it reports association and the fitted line only -- no bias,
+    no RMSE, no 1:1 line.
+    """
+    a = np.asarray(x, dtype=float)
+    b = np.asarray(y, dtype=float)
+    ok = np.isfinite(a) & np.isfinite(b)
+    a, b = a[ok], b[ok]
+
+    out: dict[str, float] = {"n": float(a.size)}
+    if a.size < 3:
+        return out
+
+    fit = sps.linregress(a, b)
+    out.update(
+        {
+            "pearson_r": float(np.corrcoef(a, b)[0, 1]),
+            "spearman_rho": float(sps.spearmanr(a, b).statistic),
+            "ols_slope": float(fit.slope),
+            "ols_intercept": float(fit.intercept),
+            "ols_slope_stderr": float(fit.stderr),
+            "ols_p_value": float(fit.pvalue),
+            "x_mean": float(a.mean()),
+            "x_sd": float(a.std(ddof=1)),
+            "y_mean": float(b.mean()),
+            "y_sd": float(b.std(ddof=1)),
+        }
+    )
+    out["r2_fit"] = out["pearson_r"] ** 2
+    # Scatter about the fitted line: what the fit leaves unexplained, in the
+    # unit of y.
+    out["rmse_fit"] = float(np.sqrt(np.mean((b - (fit.slope * a + fit.intercept)) ** 2)))
+    return out
+
+
+def binned_profile(x: np.ndarray, y: np.ndarray, edges: np.ndarray) -> pd.DataFrame:
+    """Median of ``y`` and its quartiles inside each bin of ``x``.
+
+    The profile is what shows saturation: a relation can keep a respectable
+    correlation while its median flattens out above some biomass.
+    """
+    a = np.asarray(x, dtype=float)
+    b = np.asarray(y, dtype=float)
+    ok = np.isfinite(a) & np.isfinite(b)
+    a, b = a[ok], b[ok]
+
+    rows = []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        inside = (a >= lo) & (a < hi)
+        if not inside.any():
+            continue
+        values = b[inside]
+        rows.append(
+            {
+                "x_lo": float(lo),
+                "x_hi": float(hi),
+                "x_centre": float((lo + hi) / 2.0),
+                "n": int(inside.sum()),
+                "y_q25": float(np.percentile(values, 25)),
+                "y_median": float(np.median(values)),
+                "y_q75": float(np.percentile(values, 75)),
+            }
+        )
+    return pd.DataFrame(rows)
