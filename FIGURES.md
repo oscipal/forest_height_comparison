@@ -7,8 +7,9 @@ results mean.
 Per-scene figures are written to `outputs/<site>/<scene>/` by `02_compare.py`
 (via `bgt/viz.py`); pooled figures to `outputs/_combined/` by `03_combine.py`
 (via `bgt/viz_combined.py`). Sections 2-12 cover the per-scene figures, section
-13 the pooled ones, and section 16 the biomass figures `04_compare_agbd.py`
-writes to `outputs_agbd/<site>/`.
+13 the pooled ones, section 16 the biomass figures `04_compare_agbd.py`
+writes to `outputs_agbd/<site>/`, and section 17 the Meta canopy height
+figures `02c_compare_meta.py` writes to `outputs_meta/<site>/`.
 
 ---
 
@@ -543,3 +544,51 @@ observable: n, Pearson r, Spearman ρ, both fit coefficients and R². Both are
 named after the tomographic height of the run that wrote them, so a run at a
 different height cannot overwrite another's tables. `l1b_scenes.csv` lists every
 L1b scene that fully covers the site, which is what `--list-scenes` prints.
+
+---
+
+## 17. The Meta canopy height figures (`outputs_meta/<site>/`)
+
+Written by `02c_compare_meta.py`, for the Meta global canopy height map v2
+(DINOv3, ~1.2 m, from Maxar imagery). The caption of every figure gives the
+imagery acquisition dates under the ALS outline, from
+`data/meta/<site>/meta_imagery_dates_<site>.csv`, since that date and not the
+product's release is what the ALS time gap runs to.
+
+**The grid.** At ~1.2 m the product is as fine as the ALS, so it is not judged
+on its own grid the way ETH is. Both CHMs are aggregated onto the site's 50 m
+AGBD grid where there is an AGBD map, and otherwise onto a `--cell` grid over
+the ALS footprint. Both go through the same 1 m fine-grid warp and block
+reduction as the ALS does everywhere else, so **each ALS statistic is paired with the same statistic
+of Meta**: the headline figures compare ALS p90 with Meta p90. Meta zeros are
+kept -- the product has no no-data value, and a 0 is water or a clearing.
+
+**The paired sample** is every cell with at least `--min-coverage` (90 %) of its
+area covered by valid ALS, and the same for the Meta clip.
+
+`fig01_maps.png`, `fig02_scatter.png`, `fig03_residuals.png`,
+`fig04_distributions.png`, `fig05_bland_altman.png` are the figures of sections
+2 to 6, with Meta in place of BIOMASS. `fig07_als_statistic.png` is section 8
+with one difference: each bar compares the ALS statistic with the **same**
+statistic of Meta, not one fixed product value with each ALS candidate. Its
+spread therefore says which level of the canopy the two models agree on, not
+which ALS aggregate the product targets.
+
+### `scatter_agbd_meta.png` — Meta canopy height vs biomass
+
+The step-4 biomass scatter (section 16), with the Meta **mean** height per cell
+as the observable -- the mean because it is the statistic the AGBD map is itself
+predicted from (band `zmean_chm`). It is paired by step 4's rule, not by the
+coverage rule above: an AGBD estimate and at most `--max-masked` (25 %) of the
+ALS area masked, so it stands on the same cells as the tomographic and L1b
+scatters.
+
+### Tables
+
+`paired_cells_meta.csv` holds every paired cell with all six statistics for
+both CHMs (`als_<stat>`, `meta_<stat>`), both coverages, and, where there is an
+AGBD map, the AGBD and mask fraction. `metrics_by_als_stat.csv` and
+`metrics_by_height_bin.csv` are those of the ETH step. `summary_agbd_meta.csv`
+holds the association of AGBD with the Meta mean height and, as the ceiling,
+with the ALS mean height it is predicted from. `outputs_meta/summary_meta_by_site.csv`
+is one headline row per site.
