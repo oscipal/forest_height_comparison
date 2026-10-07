@@ -3,9 +3,9 @@
 The Meta product (``01c_download_meta.py``) is ~1.2 m, as fine as the ALS
 itself, so unlike ETH it is not judged on its own grid: at that resolution any
 comparison measures crown-level geolocation and shadowing, not height. Both
-CHMs are instead aggregated onto one coarser grid -- **the site's 50 m AGBD
-grid** where an AGBD map exists, so the height and the biomass comparison share
-their cells, and otherwise a ``META_CELL_M`` grid over the ALS footprint.
+CHMs are instead aggregated onto one coarser grid laid over the ALS footprint,
+in the ALS CRS and aligned to its pixels -- ``--cell`` metres, 10 m by default,
+so the result sits at the resolution of the ETH comparison.
 
 Both go through the same machinery: one area-average warp onto a 1 m fine grid
 that divides the target grid exactly, then a block reduction into every
@@ -19,7 +19,10 @@ Per site, in ``outputs_meta/<site>/``, it writes the figures and tables the ETH
 step writes (fig01-05, fig07, ``paired_cells_meta.csv``,
 ``metrics_by_als_stat.csv``, ``metrics_by_height_bin.csv``) and, where there is
 an AGBD map, the biomass scatter of step 4 for this product:
-``scatter_agbd_meta.png`` and ``summary_agbd_meta.csv``.
+``scatter_agbd_meta.png``, ``paired_cells_agbd_meta.csv`` and
+``summary_agbd_meta.csv``. That one alone runs on the 50 m AGBD grid, the only
+grid the biomass map exists on; the AGBD map plays no part in the height
+comparison.
 
 Examples
 --------
@@ -66,8 +69,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--fine-cell", type=float, default=config.FINE_CELL_M,
                    help="target fine cell size in metres (default: %(default)s)")
     p.add_argument("--cell", type=float, default=config.META_CELL_M,
-                   help="comparison cell size in metres at a site with no AGBD "
-                        "map (default: %(default)s)")
+                   help="cell size, in metres, of the grid ALS and Meta are "
+                        "compared on (default: %(default)s)")
     p.add_argument("--min-coverage", type=float, default=config.MIN_ALS_COVERAGE)
     p.add_argument("--max-masked", type=float, default=config.AGBD_MAX_MASKED,
                    help="biomass scatter only: drop cells whose ALS mask "
@@ -87,11 +90,11 @@ def select_sites(requested: list[str] | None) -> list[Path]:
     return [by_name[s] for s in requested]
 
 
-def aggregate(chm: als_mod.AlsChm, target: meta.TargetGrid,
-              fine_cell: float) -> dict[str, np.ndarray]:
-    """Every per-cell statistic of ``chm`` on ``target``, at nominal position."""
+def aggregate(chm: als_mod.AlsChm, target: meta.TargetGrid, fine_cell: float,
+              stats: list[str] = config.ALS_STATS) -> dict[str, np.ndarray]:
+    """Per-cell ``stats`` of ``chm`` on ``target``, at nominal position."""
     grid = coreg.build_fine_grid(chm, target, fine_cell, shift_search_m=0.0)
-    return coreg.BlockAggregator(grid, target.shape).full_stats(0, 0, config.ALS_STATS)
+    return coreg.BlockAggregator(grid, target.shape).full_stats(0, 0, stats)
 
 
 def imagery_note(site: str, meta_dir: Path) -> str:
@@ -116,19 +119,35 @@ def matched_stat_table(paired: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("rmse").reset_index(drop=True)
 
 
-def biomass_figure(site: str, df: pd.DataFrame, agbd: agbd_mod.AgbdGrid,
+def biomass_figure(site: str, chm: als_mod.AlsChm, meta_chm: als_mod.AlsChm,
                    args: argparse.Namespace, out_dir: Path, dates: str) -> None:
     """Step 4's biomass scatter, with the Meta height as the observable.
 
-    Paired by the same rule as the tomographic and L1b scatters -- an AGBD
-    estimate and at most ``--max-masked`` of the ALS area masked -- so the
-    three figures stand on the same cells.
+    The AGBD map exists only on its own 50 m grid, so both CHMs are aggregated
+    onto that grid here, separately from the height comparison. Paired by the
+    same rule as the tomographic and L1b scatters -- an AGBD estimate and at
+    most ``--max-masked`` of the ALS area masked -- so the three figures stand
+    on the same cells.
     """
+    agbd = agbd_mod.load_agbd(site)
+    target = meta.TargetGrid(agbd.transform, agbd.crs, agbd.shape)
+    print(f"  biomass: the 50 m AGBD grid, {target.shape[0]} x {target.shape[1]} cells")
+    stats = [AGBD_META_STAT]
+    als_mean = aggregate(chm, target, args.fine_cell, stats)[AGBD_META_STAT]
+    meta_mean = aggregate(meta_chm, target, args.fine_cell, stats)[AGBD_META_STAT]
+
+    keep = agbd.valid(args.max_masked) & np.isfinite(meta_mean)
+    rows, cols = np.where(keep)
     meta_col = f"meta_{AGBD_META_STAT}"
-    keep = (np.isfinite(df["agbd_t_ha"])
-            & (df["masked_fraction"] <= args.max_masked)
-            & np.isfinite(df[meta_col]))
-    sample = df[keep]
+    sample = pd.DataFrame({
+        "row": rows,
+        "col": cols,
+        "agbd_t_ha": agbd.agbd[keep],
+        "masked_fraction": agbd.masked_fraction[keep],
+        f"als_{AGBD_META_STAT}": als_mean[keep],
+        meta_col: meta_mean[keep],
+    })
+    sample.to_csv(out_dir / "paired_cells_agbd_meta.csv", index=False)
     print(f"  {len(sample):,} cells with both AGBD and a Meta height")
     viz.plot_relation(
         sample["agbd_t_ha"].to_numpy(),
@@ -166,14 +185,8 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
         return None
     chm = als_mod.load_chm(als_dir, chm_name=args.chm)
 
-    agbd = None
-    if agbd_mod.agbd_path(site).is_file():
-        agbd = agbd_mod.load_agbd(site)
-        target = meta.TargetGrid(agbd.transform, agbd.crs, agbd.shape)
-        grid_label = "the 50 m AGBD grid"
-    else:
-        target = meta.footprint_grid(chm, args.cell)
-        grid_label = f"a {args.cell:g} m grid over the ALS footprint"
+    target = meta.footprint_grid(chm, args.cell)
+    grid_label = f"a {args.cell:g} m grid over the ALS footprint"
     print(f"  target: {grid_label}, {target.shape[0]} x {target.shape[1]} cells")
 
     print("  ALS:")
@@ -199,9 +212,6 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
         df[f"meta_{stat}"] = meta_stats[stat].ravel()
     # The column the figures and the stratified table read, as "eth" is for ETH.
     df["meta"] = df[f"meta_{args.primary_stat}"]
-    if agbd is not None:
-        df["agbd_t_ha"] = agbd.agbd.ravel()
-        df["masked_fraction"] = agbd.masked_fraction.ravel()
 
     ref_col = f"als_{args.primary_stat}"
     keep = (
@@ -282,8 +292,8 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
         subtitle=subtitle + "\nEach bar pairs the ALS statistic with the same "
                             "statistic of Meta", prod_short="Meta")
 
-    if agbd is not None:
-        biomass_figure(site, df, agbd, args, out_dir, dates)
+    if agbd_mod.agbd_path(site).is_file():
+        biomass_figure(site, chm, meta_chm, args, out_dir, dates)
 
     px_x, px_y = target.cell_size_m()
     return {

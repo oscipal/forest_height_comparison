@@ -117,7 +117,9 @@ class TargetGrid:
 def footprint_grid(chm: AlsChm, cell_m: float) -> TargetGrid:
     """A north-up ``cell_m`` grid over the ALS footprint, in the ALS CRS.
 
-    The fallback for a site without an AGBD map, whose grid is used otherwise.
+    Its origin is the ALS raster's own, so with a whole-metre ``cell_m`` the
+    1 m fine grid built on it coincides with the ALS pixels and the ALS is
+    copied onto it rather than resampled.
     """
     left, bottom, right, top = rasterio.transform.array_bounds(*chm.shape,
                                                                chm.transform)

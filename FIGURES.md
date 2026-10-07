@@ -556,12 +556,15 @@ imagery acquisition dates under the ALS outline, from
 product's release is what the ALS time gap runs to.
 
 **The grid.** At ~1.2 m the product is as fine as the ALS, so it is not judged
-on its own grid the way ETH is. Both CHMs are aggregated onto the site's 50 m
-AGBD grid where there is an AGBD map, and otherwise onto a `--cell` grid over
-the ALS footprint. Both go through the same 1 m fine-grid warp and block
-reduction as the ALS does everywhere else, so **each ALS statistic is paired with the same statistic
-of Meta**: the headline figures compare ALS p90 with Meta p90. Meta zeros are
-kept -- the product has no no-data value, and a 0 is water or a clearing.
+on its own grid the way ETH is. Both CHMs are aggregated onto a `--cell` grid
+(10 m by default, the resolution of the ETH comparison) laid over the ALS
+footprint in the ALS CRS. Its origin is the ALS raster's, so the 1 m ALS pixels
+fall exactly onto the 1 m fine grid and are copied, not resampled; Meta's
+~1.19 m pixels are reprojected onto it by area-weighted average. Both then go
+through the same block reduction, so **each ALS statistic is paired with the
+same statistic of Meta**: the headline figures compare ALS p90 with Meta p90.
+Meta zeros are kept -- the product has no no-data value, and a 0 is water or a
+clearing. The AGBD map plays no part in this comparison.
 
 **The paired sample** is every cell with at least `--min-coverage` (90 %) of its
 area covered by valid ALS, and the same for the Meta clip.
@@ -578,7 +581,9 @@ which ALS aggregate the product targets.
 
 The step-4 biomass scatter (section 16), with the Meta **mean** height per cell
 as the observable -- the mean because it is the statistic the AGBD map is itself
-predicted from (band `zmean_chm`). It is paired by step 4's rule, not by the
+predicted from (band `zmean_chm`). The biomass map exists only on its 50 m
+grid, so for this figure alone both CHMs are aggregated a second time, onto
+that grid. It is paired by step 4's rule, not by the
 coverage rule above: an AGBD estimate and at most `--max-masked` (25 %) of the
 ALS area masked, so it stands on the same cells as the tomographic and L1b
 scatters.
@@ -586,9 +591,10 @@ scatters.
 ### Tables
 
 `paired_cells_meta.csv` holds every paired cell with all six statistics for
-both CHMs (`als_<stat>`, `meta_<stat>`), both coverages, and, where there is an
-AGBD map, the AGBD and mask fraction. `metrics_by_als_stat.csv` and
-`metrics_by_height_bin.csv` are those of the ETH step. `summary_agbd_meta.csv`
+both CHMs (`als_<stat>`, `meta_<stat>`) and both coverages.
+`metrics_by_als_stat.csv` and `metrics_by_height_bin.csv` are those of the ETH
+step. `paired_cells_agbd_meta.csv` is the 50 m sample of the biomass scatter:
+AGBD, mask fraction and both mean heights per cell. `summary_agbd_meta.csv`
 holds the association of AGBD with the Meta mean height and, as the ceiling,
 with the ALS mean height it is predicted from. `outputs_meta/summary_meta_by_site.csv`
 is one headline row per site.

@@ -247,10 +247,11 @@ META_BUFFER_DEG = 0.005
 #: 03_combine.py never pools these pairs with the BIOMASS ones.
 META_OUTPUT_DIR = ROOT / "outputs_meta"
 
-#: Cell size, in metres, of the grid the comparison runs on at a site with no
-#: AGBD map. Where there is one, its own 50 m grid is used instead, so the
-#: height and the biomass comparison share their cells.
-META_CELL_M = 50.0
+#: Cell size, in metres, of the grid ALS and Meta are compared on. The grid is
+#: laid over the ALS footprint and aligned to its pixels. 10 m puts the result
+#: at the resolution of the ETH comparison; the biomass scatter runs on the 50 m
+#: AGBD grid regardless.
+META_CELL_M = 10.0
 
 # --------------------------------------------------------------------------- #
 # Co-registration and aggregation
