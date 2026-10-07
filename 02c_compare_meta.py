@@ -189,38 +189,44 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
     grid_label = f"a {args.cell:g} m grid over the ALS footprint"
     print(f"  target: {grid_label}, {target.shape[0]} x {target.shape[1]} cells")
 
-    print("  ALS:")
-    als_stats = aggregate(chm, target, args.fine_cell)
-    print("  Meta:")
-    meta_stats = aggregate(meta_chm, target, args.fine_cell)
+    # A cell no larger than a fine cell holds one value, so every statistic of
+    # it is that value: compute it once and compare pixel against pixel.
+    per_cell_stats = round(args.cell / args.fine_cell) > 1
+    stats = config.ALS_STATS if per_cell_stats else ["mean"]
+    primary = args.primary_stat if per_cell_stats else "mean"
 
-    rows, cols = np.indices(target.shape)
-    xs, ys = rasterio.transform.xy(target.transform, rows.ravel(), cols.ravel())
-    df = pd.DataFrame({
+    print("  ALS:")
+    als_stats = aggregate(chm, target, args.fine_cell, stats)
+    print("  Meta:")
+    meta_stats = aggregate(meta_chm, target, args.fine_cell, stats)
+
+    keep = (
+        np.isfinite(meta_stats[primary])
+        & np.isfinite(als_stats[primary])
+        & (als_stats["coverage"] >= args.min_coverage)
+        & (meta_stats["coverage"] >= args.min_coverage)
+    )
+    # Built from the kept cells only: at 1 m the grid has tens of millions.
+    rows, cols = np.nonzero(keep)
+    xs, ys = target.transform * (cols + 0.5, rows + 0.5)
+    paired = pd.DataFrame({
         "site": site,
         "product": "Meta_GlobalCanopyHeight_v2_DINOv3",
-        "row": rows.ravel(),
-        "col": cols.ravel(),
-        "x": np.asarray(xs),
-        "y": np.asarray(ys),
-        "coverage": als_stats["coverage"].ravel(),
-        "meta_coverage": meta_stats["coverage"].ravel(),
-        "n_fine": als_stats["n_fine"].ravel(),
+        "row": rows,
+        "col": cols,
+        "x": xs,
+        "y": ys,
+        "coverage": als_stats["coverage"][keep],
+        "meta_coverage": meta_stats["coverage"][keep],
+        "n_fine": als_stats["n_fine"][keep],
     })
-    for stat in config.ALS_STATS:
-        df[f"als_{stat}"] = als_stats[stat].ravel()
-        df[f"meta_{stat}"] = meta_stats[stat].ravel()
+    for stat in stats:
+        paired[f"als_{stat}"] = als_stats[stat][keep]
+        paired[f"meta_{stat}"] = meta_stats[stat][keep]
     # The column the figures and the stratified table read, as "eth" is for ETH.
-    df["meta"] = df[f"meta_{args.primary_stat}"]
-
-    ref_col = f"als_{args.primary_stat}"
-    keep = (
-        np.isfinite(df["meta"])
-        & (df["coverage"] >= args.min_coverage)
-        & (df["meta_coverage"] >= args.min_coverage)
-        & np.isfinite(df[ref_col])
-    )
-    paired = df[keep].copy()
+    paired["meta"] = paired[f"meta_{primary}"]
+    ref_col = f"als_{primary}"
+    del als_stats, meta_stats
     print(f"  {len(paired):,} paired cells at coverage >= {args.min_coverage:.0%} "
           f"(of {target.shape[0] * target.shape[1]:,} cells in the grid)")
     if len(paired) < 20:
@@ -230,19 +236,26 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
     headline = metrics.compute_metrics(paired[ref_col].to_numpy(),
                                        paired["meta"].to_numpy())
     print()
+    stat_label = primary if per_cell_stats else f"{args.cell:g} m pixel"
     print(metrics.format_summary(
         headline,
-        ref_label=f"ALS {args.primary_stat} ({args.chm})",
-        prod_label=f"Meta CHM v2 {args.primary_stat}",
+        ref_label=f"ALS {stat_label} ({args.chm})",
+        prod_label=f"Meta CHM v2 {stat_label}",
     ))
 
     out_dir = args.out_dir / site
     out_dir.mkdir(parents=True, exist_ok=True)
-    stat_table = matched_stat_table(paired)
     bin_table = metrics.binned_metrics(paired, ref_col, product_col="meta")
-    paired.to_csv(out_dir / "paired_cells_meta.csv", index=False)
-    stat_table.to_csv(out_dir / "metrics_by_als_stat.csv", index=False)
     bin_table.to_csv(out_dir / "metrics_by_height_bin.csv", index=False)
+    stat_table = None
+    if per_cell_stats:
+        stat_table = matched_stat_table(paired)
+        stat_table.to_csv(out_dir / "metrics_by_als_stat.csv", index=False)
+        paired.to_csv(out_dir / "paired_cells_meta.csv", index=False)
+    else:
+        # One row per pixel would run to gigabytes and holds nothing the
+        # rasters in data/ do not.
+        print("  per-pixel run: no statistic table and no paired-cells table")
 
     # ---------------------------------------------------------------- #
     # Figures
@@ -258,14 +271,17 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
 
     site_label, als_dates = als_mod.acquisition_label(als_dir)
     dates = imagery_note(site, args.meta_dir)
+    how = (f"Both aggregated to {primary} per cell on {grid_label}"
+           if per_cell_stats else
+           f"Compared pixel by pixel on {grid_label} (Meta resampled to it, "
+           "ALS on its own pixels)")
     subtitle = (
         f"Site: {site_label}   |   ALS: {args.chm}, acquired {als_dates}\n"
-        f"Meta canopy height v2 (DINOv3, ~1.2 m), {dates}\n"
-        f"Both aggregated to {args.primary_stat} per cell on {grid_label}"
+        f"Meta canopy height v2 (DINOv3, ~1.2 m), {dates}\n{how}"
     )
-    stat_label = args.primary_stat
-    ref_label = f"ALS canopy height, {stat_label} per cell (m)"
-    prod_label = f"Meta canopy height, {stat_label} per cell (m)"
+    unit = f"{primary} per cell" if per_cell_stats else f"per {args.cell:g} m pixel"
+    ref_label = f"ALS canopy height, {unit} (m)"
+    prod_label = f"Meta canopy height, {unit} (m)"
     lims = viz.height_limits(paired[ref_col].to_numpy(), paired["meta"].to_numpy())
 
     viz.plot_maps(als_grid, meta_grid, extent, out_dir / "fig01_maps.png",
@@ -287,10 +303,11 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
     viz.plot_bland_altman(paired[ref_col].to_numpy(), paired["meta"].to_numpy(),
                           out_dir / "fig05_bland_altman.png", subtitle=subtitle,
                           prod_short="Meta")
-    viz.plot_stat_comparison(
-        stat_table, out_dir / "fig07_als_statistic.png",
-        subtitle=subtitle + "\nEach bar pairs the ALS statistic with the same "
-                            "statistic of Meta", prod_short="Meta")
+    if stat_table is not None:
+        viz.plot_stat_comparison(
+            stat_table, out_dir / "fig07_als_statistic.png",
+            subtitle=subtitle + "\nEach bar pairs the ALS statistic with the "
+                                "same statistic of Meta", prod_short="Meta")
 
     if agbd_mod.agbd_path(site).is_file():
         biomass_figure(site, chm, meta_chm, args, out_dir, dates)
@@ -301,7 +318,7 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
         "product": "Meta_GlobalCanopyHeight_v2_DINOv3",
         "meta_imagery": dates,
         "als_chm": args.chm,
-        "als_stat": args.primary_stat,
+        "als_stat": stat_label,
         "als_dates": als_dates,
         "cell_m_x": px_x,
         "cell_m_y": px_y,
