@@ -217,6 +217,32 @@ ETH_OUTPUT_DIR = ROOT / "outputs_eth"
 #: metres in 0-254. Values above this are treated as no-data.
 ETH_HEIGHT_MAX = 254.0
 
+
+# --------------------------------------------------------------------------- #
+# Meta global canopy height v2 (DINOv3)
+# --------------------------------------------------------------------------- #
+#
+# A third spaceborne height product: ~1.2 m canopy height predicted from Maxar
+# very-high-resolution imagery by a DINOv3 backbone, published openly by Meta
+# and the World Resources Institute on AWS. Each tile is a 32768 x 32768 uint8
+# COG in Web Mercator, named by its zoom-10 quadkey, with a companion GeoJSON
+# recording the acquisition date of the imagery under every part of the tile.
+
+#: Public S3 bucket holding the product, read anonymously over HTTPS.
+META_BASE_URL = (
+    "https://dataforgood-fb-data.s3.amazonaws.com/"
+    "forests/v2/global/dinov3_global_chm_v2_ml3"
+)
+
+#: Quadkey zoom level of the tiling; one tile is 1/1024 of the world's width.
+META_TILE_ZOOM = 10
+
+#: Where the clipped windows and their imagery dates are stored.
+META_DIR = ROOT / "data" / "meta"
+
+#: Degrees added around the ALS outline when clipping.
+META_BUFFER_DEG = 0.005
+
 # --------------------------------------------------------------------------- #
 # Co-registration and aggregation
 # --------------------------------------------------------------------------- #
