@@ -4,4 +4,4 @@ __pycache__/
 03_processed_*/
 /data
 outputs_eth/*/paired_cells_eth.csv
-outputs_meta/*/paired_cells_meta.csv
+outputs_meta*/*/paired_cells_meta.csv
