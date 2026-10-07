@@ -577,6 +577,15 @@ statistic of Meta, not one fixed product value with each ALS candidate. Its
 spread therefore says which level of the canopy the two models agree on, not
 which ALS aggregate the product targets.
 
+**The 1 m run** (`outputs_meta_1m/<site>/`, from `--cell 1 --no-biomass
+--out-dir outputs_meta_1m`) compares the two pixel by pixel: each cell holds one
+1 m pixel, so every statistic of it is the same value. It writes fig01-05 and
+`metrics_by_height_bin.csv` only -- no fig07 or statistic table, which would
+compare one number with itself six times, and no paired-cells table, which
+would run to gigabytes. The residual and Bland-Altman plots draw a fixed random
+sample of 500 000 of the ~18 million pixels; every number on them and every
+statistic uses all of them.
+
 ### `scatter_agbd_meta.png` — Meta canopy height vs biomass
 
 The step-4 biomass scatter (section 16), with the Meta **mean** height per cell

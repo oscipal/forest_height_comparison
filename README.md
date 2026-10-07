@@ -916,6 +916,7 @@ data/l1b/<scene>/          cached L1b annotation and LUT -- gitignored, step 4
 outputs_agbd/<site>/       AGBD-vs-backscatter figures and tables
 outputs_meta/<site>/       Meta-vs-ALS and Meta-vs-AGBD figures and tables
 outputs_meta/summary_meta_by_site.csv  one row per site, Meta vs ALS
+outputs_meta_1m/<site>/    Meta vs ALS pixel by pixel at 1 m
 ```
 
 ## Caveats worth stating in any write-up
