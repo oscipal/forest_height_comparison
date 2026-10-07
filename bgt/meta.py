@@ -3,7 +3,7 @@
 ~1.2 m canopy height predicted from Maxar very-high-resolution imagery,
 published by Meta on AWS (``s3://dataforgood-fb-data/forests/v2/global/
 dinov3_global_chm_v2_ml3/``). ``01c_download_meta.py`` clips it to each ALS
-footprint; this module locates the tiles and names the clips.
+footprint; this module locates the tiles and reads those clips.
 
 Three properties of the product shape everything downstream:
 
@@ -20,11 +20,16 @@ Three properties of the product shape everything downstream:
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import rasterio
+from affine import Affine
+from rasterio.crs import CRS
 
 import config
+from bgt.als import AlsChm
 
 
 def quadkey(lon: float, lat: float, zoom: int = config.META_TILE_ZOOM) -> str:
@@ -72,3 +77,50 @@ def dates_path(site: str, meta_dir: Path = config.META_DIR) -> Path:
     """Where ``01c_download_meta.py`` puts the imagery dates for ``site``."""
     return meta_dir / site / f"meta_imagery_dates_{site}.csv"
 
+
+def load_clip(site: str, meta_dir: Path = config.META_DIR) -> AlsChm | None:
+    """Read the Meta clip for ``site`` as a canopy height model.
+
+    It comes back in the same container as the ALS CHM, because at ~1.2 m it is
+    one: the fine-grid warp and block reduction in :mod:`bgt.coreg` then treat
+    both identically, and every per-cell statistic is computed the same way on
+    either side. Returns ``None`` when the site has no clip.
+    """
+    path = clip_path(site, meta_dir)
+    if not path.is_file():
+        print(f"  no Meta clip for {site} at {path} -- run 01c_download_meta.py")
+        return None
+    with rasterio.open(path) as src:
+        # uint8 cannot hold nan; nothing is masked, since the product declares
+        # no no-data and a 0 is a real prediction.
+        height = src.read(1).astype(np.float32)
+        return AlsChm(height=height, transform=src.transform, crs=src.crs,
+                      name=path.name)
+
+
+@dataclass(frozen=True)
+class TargetGrid:
+    """A grid to aggregate both CHMs onto.
+
+    Carries the attributes :func:`bgt.coreg.build_fine_grid` reads from its
+    target (``shape``, ``transform``, ``crs``, ``cell_size_m``).
+    """
+
+    transform: Affine
+    crs: CRS
+    shape: tuple[int, int]
+
+    def cell_size_m(self) -> tuple[float, float]:
+        return abs(self.transform.a), abs(self.transform.e)
+
+
+def footprint_grid(chm: AlsChm, cell_m: float) -> TargetGrid:
+    """A north-up ``cell_m`` grid over the ALS footprint, in the ALS CRS.
+
+    The fallback for a site without an AGBD map, whose grid is used otherwise.
+    """
+    left, bottom, right, top = rasterio.transform.array_bounds(*chm.shape,
+                                                               chm.transform)
+    shape = (int(np.ceil((top - bottom) / cell_m)),
+             int(np.ceil((right - left) / cell_m)))
+    return TargetGrid(Affine(cell_m, 0.0, left, 0.0, -cell_m, top), chm.crs, shape)

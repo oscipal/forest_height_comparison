@@ -243,6 +243,15 @@ META_DIR = ROOT / "data" / "meta"
 #: Degrees added around the ALS outline when clipping.
 META_BUFFER_DEG = 0.005
 
+#: Where the Meta-vs-ALS results go. A separate tree, like the ETH one, so
+#: 03_combine.py never pools these pairs with the BIOMASS ones.
+META_OUTPUT_DIR = ROOT / "outputs_meta"
+
+#: Cell size, in metres, of the grid the comparison runs on at a site with no
+#: AGBD map. Where there is one, its own 50 m grid is used instead, so the
+#: height and the biomass comparison share their cells.
+META_CELL_M = 50.0
+
 # --------------------------------------------------------------------------- #
 # Co-registration and aggregation
 # --------------------------------------------------------------------------- #
