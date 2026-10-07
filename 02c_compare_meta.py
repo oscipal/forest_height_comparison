@@ -75,6 +75,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--max-masked", type=float, default=config.AGBD_MAX_MASKED,
                    help="biomass scatter only: drop cells whose ALS mask "
                         "fraction exceeds this (default: %(default)s)")
+    p.add_argument("--no-biomass", action="store_true",
+                   help="skip the biomass scatter, which runs on the 50 m AGBD "
+                        "grid whatever --cell is")
     return p.parse_args(argv)
 
 
@@ -309,7 +312,7 @@ def compare_site(als_dir: Path, args: argparse.Namespace) -> dict | None:
             subtitle=subtitle + "\nEach bar pairs the ALS statistic with the "
                                 "same statistic of Meta", prod_short="Meta")
 
-    if agbd_mod.agbd_path(site).is_file():
+    if not args.no_biomass and agbd_mod.agbd_path(site).is_file():
         biomass_figure(site, chm, meta_chm, args, out_dir, dates)
 
     px_x, px_y = target.cell_size_m()
