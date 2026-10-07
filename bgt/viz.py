@@ -252,6 +252,20 @@ def plot_scatter(
     return _save(fig, out_path)
 
 
+#: Most points a point-cloud figure draws. Statistics always use every cell;
+#: only the drawing is thinned, since tens of millions of translucent markers
+#: render no differently from half a million and take minutes. Every run on the
+#: BIOMASS and ETH grids stays below this, so their figures are unaffected.
+MAX_DRAWN_POINTS = 500_000
+
+
+def _drawn(n: int) -> np.ndarray:
+    """Indices of the points to draw: all of them, or a fixed random sample."""
+    if n <= MAX_DRAWN_POINTS:
+        return np.arange(n)
+    return np.random.default_rng(0).choice(n, MAX_DRAWN_POINTS, replace=False)
+
+
 def plot_residuals(
     reference: np.ndarray,
     product: np.ndarray,
@@ -281,8 +295,9 @@ def plot_residuals(
 
     fig, ax = plt.subplots(figsize=(7.6, 5.0), constrained_layout=True)
     ax.axhline(0.0, color=INK_MUTED, lw=1.2, ls="--", zorder=2)
-    ax.scatter(x, resid, s=7, color=BLUE, alpha=0.22, linewidths=0, zorder=3,
-               label=f"{prod_short} cell")
+    drawn = _drawn(x.size)
+    ax.scatter(x[drawn], resid[drawn], s=7, color=BLUE, alpha=0.22, linewidths=0,
+               zorder=3, label=f"{prod_short} cell")
     if len(agg):
         ax.errorbar(centres, agg["mean"], yerr=agg["std"], color=ORANGE, lw=2.0,
                     marker="o", ms=6, capsize=4, elinewidth=1.6, zorder=5,
@@ -329,7 +344,10 @@ def plot_distributions(
 
     for data, colour, name in ((x, BLUE, "ALS"), (y, ORANGE, prod_short)):
         s = np.sort(data)
-        ax2.plot(s, np.arange(1, s.size + 1) / s.size, color=colour, label=name)
+        frac = np.arange(1, s.size + 1) / s.size
+        # Evenly spaced vertices of the sorted sample trace the same curve.
+        step = max(1, s.size // MAX_DRAWN_POINTS)
+        ax2.plot(s[::step], frac[::step], color=colour, label=name)
     ax2.set_xlabel("canopy height (m)")
     ax2.set_ylabel("cumulative fraction of cells")
     ax2.set_title("Empirical cumulative distributions")
@@ -358,7 +376,8 @@ def plot_bland_altman(
     bias, sd = diff.mean(), diff.std(ddof=1)
 
     fig, ax = plt.subplots(figsize=(7.6, 5.0), constrained_layout=True)
-    ax.scatter(mean_h, diff, s=8, color=BLUE, alpha=0.25, linewidths=0)
+    drawn = _drawn(diff.size)
+    ax.scatter(mean_h[drawn], diff[drawn], s=8, color=BLUE, alpha=0.25, linewidths=0)
     for value, colour, name in (
         (bias, ORANGE, f"bias {bias:+.2f} m"),
         (bias + 1.96 * sd, INK_MUTED, f"+1.96 SD  {bias + 1.96 * sd:+.2f} m"),
